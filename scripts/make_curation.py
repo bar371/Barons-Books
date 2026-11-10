@@ -203,6 +203,8 @@ RECS = [
   "Necromancers in space, a locked-room mystery and irreverent humour, for fans of Dungeon Crawler Carl's tone."),
  ("babel", "Babel", "R.F. Kuang", 2022, ["Mythic & Literary Fantasy"], ["14201", "50202953"],
   "Dark academia in an alternate Oxford where translation is magic: Strange & Norrell's scholarly England turned political."),
+ ("sun-eater", "Empire of Silence (The Sun Eater, #1)", "Christopher Ruocchio", 2018, ["Science Fantasy", "Grimdark"], ["186074", "32758901"],
+  "A far-future space opera told as a villain's confession: Name of the Wind's retrospective narrator on a Dune-scale canvas of dying empires, with a grim, war-weary edge."),
  ("bourne-identity", "The Bourne Identity", "Robert Ludlum", 1980, ["Action Thriller"], ["204276", "93947"],
   "A man with no memory and lethal skills: a classic of the conspiracy thriller."),
 ]
@@ -222,7 +224,7 @@ FIT = {
     "parable-sower": 70, "slaughterhouse": 68, "master-margarita": 66, "blood-meridian": 70, "true-grit": 66,
     "sisters-brothers": 72, "wind-up-bird": 55, "hundred-years": 52, "snowman": 70, "smilla": 60,
     "killing-floor": 74, "bourne-identity": 68, "foundryside": 90, "hyperion": 82, "priory-orange-tree": 80,
-    "gideon-ninth": 70, "babel": 68,
+    "gideon-ninth": 70, "babel": 68, "sun-eater": 86,
 }
 
 

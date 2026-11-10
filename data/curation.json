@@ -2006,6 +2006,22 @@
    "fit": 68
   },
   {
+   "id": "rec-sun-eater",
+   "title": "Empire of Silence (The Sun Eater, #1)",
+   "author": "Christopher Ruocchio",
+   "year": 2018,
+   "genres": [
+    "Science Fantasy",
+    "Grimdark"
+   ],
+   "because": [
+    "186074",
+    "32758901"
+   ],
+   "reason": "A far-future space opera told as a villain's confession: Name of the Wind's retrospective narrator on a Dune-scale canvas of dying empires, with a grim, war-weary edge.",
+   "fit": 86
+  },
+  {
    "id": "rec-bourne-identity",
    "title": "The Bourne Identity",
    "author": "Robert Ludlum",
