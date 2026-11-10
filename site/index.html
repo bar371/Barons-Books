@@ -44,6 +44,7 @@
 
 <div class="dock glass">
   <label class="switch" title="Show recommended books (R)"><input id="t-recs" type="checkbox" checked><span></span>Recommendations</label>
+  <label class="range" title="Show only the top-ranked recommendations"><span>Top</span><input id="r-limit" type="range" min="5" max="54" value="54" aria-label="Number of recommendations to show"><b id="r-val">all</b></label>
   <label class="switch" title="Show my to-read shelf and current read (Q)"><input id="t-queue" type="checkbox" checked><span></span>To read</label>
   <label class="switch" title="Always show titles (T)"><input id="t-labels" type="checkbox"><span></span>Titles</label>
   <i class="sep"></i>
@@ -70,7 +71,7 @@
       <li><kbd>/</kbd> search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> layouts · <kbd>R</kbd> recommendations</li>
       <li><kbd>Q</kbd> to-read shelf · <kbd>T</kbd> titles · <kbd>S</kbd> surprise me · <kbd>D</kbd> theme · <kbd>0</kbd> fit</li>
     </ul>
-    <p class="muted">Solid rings are books I've read. Dotted rings with a ribbon are on my to-read shelf, and a golden marching ring is what I'm reading now. Dashed, softly pulsing rings are recommendations, tied by a dashed line to the books that inspired them.</p>
+    <p class="muted">Solid rings are books I've read. Dotted rings with a ribbon are on my to-read shelf, and a golden marching ring is what I'm reading now. Dashed, softly pulsing rings are recommendations, tied by a dashed line to the books that inspired them. The better the match, the bigger and brighter the pick and the faster its lane; the top 10 wear a numbered medal.</p>
     <button id="help-close">Got it</button>
   </div>
 </div>

@@ -208,6 +208,24 @@ RECS = [
 ]
 
 
+# How well each recommendation suits *my read of your taste* (0-100). This is Claude's judgment,
+# informed by what you rate 5 stars (grimdark, big-magic epic fantasy, Murderbot, Jade, LitRPG) and
+# what you don't (romantasy, 1Q84). build_graph.py blends it with your ratings of the linked books.
+FIT = {
+    "black-company": 94, "prince-of-thorns": 90, "locke-lamora": 93, "blacktongue": 88, "senlin": 82,
+    "poppy-war": 86, "baru": 84, "got": 85, "al-rassan": 80, "way-of-shadows": 82, "emperors-blades": 78,
+    "sword-kaigen": 87, "blood-song": 91, "theft-of-swords": 74, "gunslinger": 72, "rook": 80,
+    "neverwhere": 70, "moon-called": 66, "night-circus": 62, "starless-sea": 60, "circe": 66,
+    "serpent-wings": 55, "acotar": 48, "good-omens": 78, "princess-bride": 72, "children-time": 85,
+    "memory-empire": 80, "ancillary-justice": 78, "leviathan-wakes": 83, "dune": 84, "forever-war": 76,
+    "snow-crash": 79, "hitchhikers": 76, "hwfwm": 89, "cradle": 87, "brave-new-world": 62, "fahrenheit": 60,
+    "parable-sower": 70, "slaughterhouse": 68, "master-margarita": 66, "blood-meridian": 70, "true-grit": 66,
+    "sisters-brothers": 72, "wind-up-bird": 55, "hundred-years": 52, "snowman": 70, "smilla": 60,
+    "killing-floor": 74, "bourne-identity": 68, "foundryside": 90, "hyperion": 82, "priory-orange-tree": 80,
+    "gideon-ninth": 70, "babel": 68,
+}
+
+
 def main():
     books = load_read_books()
     ids = {b["id"] for b in books}
@@ -223,8 +241,9 @@ def main():
         bad = [x for x in because if x not in ids]
         assert not bad, (slug, bad)
         assert all(any(gg in v for v in TREE.values()) for gg in genres), (slug, genres)
+        assert slug in FIT, f"add a FIT score for {slug}"
         recs.append({"id": "rec-" + slug, "title": title, "author": author, "year": year,
-                     "genres": genres, "because": because, "reason": reason})
+                     "genres": genres, "because": because, "reason": reason, "fit": FIT[slug]})
     for gs in [g for v in SERIES.values() for g in v[0]] + [g for v in BY_TITLE.values() for g in v[0]]:
         assert any(gs in v for v in TREE.values()), gs
     (ROOT / "data" / "curation.json").write_text(

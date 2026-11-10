@@ -16,6 +16,13 @@ Live at <https://bar371.github.io/Barons-Books/>.
    - `python scripts/build_graph.py` - write `site/data.json`
 3. Commit and push. The *Deploy to GitHub Pages* workflow publishes `site/` (also runnable by hand from the Actions tab).
 
+## How recommendations are ranked
+
+Each pick gets a 0-100 match: 60% **taste fit** (Claude's judgment, the `FIT` table in
+`scripts/make_curation.py`), 30% how highly I rated the books it's linked to, 10% how many of my
+books point to it. Better matches are bigger, glow brighter and get faster "lanes"; the top 10 wear
+a numbered medal, and the **Top** slider in the dock shows only the best N.
+
 ## Layout
 
 | Path | What |

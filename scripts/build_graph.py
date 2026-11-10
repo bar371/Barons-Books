@@ -129,9 +129,21 @@ def main():
         if not because or not genres:
             print(f'skip rec {r.get("title")}: needs valid genres and "because" ids', file=sys.stderr)
             continue
+        # Match score = 60% taste fit (Claude's call) + 30% how highly you rated the books behind it
+        # + 10% how many of your books point to it.
+        stars = [b["rating"] for b in out_books if b["id"] in because and b.get("rating")]
+        taste = r.get("fit", 70)
+        ratings = round(sum(stars) / len(stars) / 5 * 100) if stars else 70
+        links = round(min(len(because), 3) / 3 * 100)
         out_recs.append({"id": r["id"], "title": r["title"], "author": r["author"], "year": r.get("year"),
                          "genres": genres, "reason": r.get("reason"), "because": because,
-                         "cover": covers.get(r["id"])})
+                         "cover": covers.get(r["id"]),
+                         "score": round(0.6 * taste + 0.3 * ratings + 0.1 * links),
+                         "parts": {"taste": taste, "ratings": ratings, "links": links,
+                                   "avgStars": round(sum(stars) / len(stars), 1) if stars else None}})
+    out_recs.sort(key=lambda x: (-x["score"], -x["parts"]["taste"], x["title"]))
+    for i, x in enumerate(out_recs, 1):
+        x["rank"] = i
 
     # count usage so colours go to the biggest macro genres first
     usage = {m: 0 for m in tree}

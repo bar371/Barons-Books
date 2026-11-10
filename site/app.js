@@ -21,7 +21,7 @@ let sim, zoom, timeline = null, C = {}, stars = [];
 const imgs = new Map();
 const UNCAT = "#9aa5c0";
 const isItem = (n) => n.kind === "book" || n.kind === "rec" || n.kind === "queue";
-let showQueue = true, atlasImg = null, atlasReady = false, A = null, fullLoading = 0;
+let recLimit = 999, showQueue = true, atlasImg = null, atlasReady = false, A = null, fullLoading = 0;
 const NOIMG = { ok: false };
 
 /* ---------- theme ---------- */
@@ -89,10 +89,11 @@ function build() {
   for (const g of data.genres.filter((g) => !g.parent)) genreNodes.set(g.id, add({ id: "g:" + g.id, gid: g.id, kind: "macro", name: g.name, color: g.color, rad: 26, count: g.count, gset: new Set() }));
   for (const g of data.genres.filter((g) => g.parent)) genreNodes.set(g.id, add({ id: "g:" + g.id, gid: g.id, kind: "sub", name: g.name, color: g.color, parentG: g.parent, rad: 15, count: g.count, gset: new Set() }));
 
+  const sMin = d3.min(data.recs, (r) => r.score) ?? 0, sMax = d3.max(data.recs, (r) => r.score) ?? 1;
   const item = (b, kind) => {
     const gs = b.genres || [], primary = gs[0], macro = primary ? gmap.get(primary)?.parent : null;
     return add({ ...b, kind, name: b.title, genreIds: gs, macroId: macro, color: macro ? gmap.get(macro).color : UNCAT,
-      rad: kind === "rec" ? 25 : 27, sc: kind === "rec" ? 0.95 : kind === "queue" ? 0.92 : 0.88 + 0.07 * (b.rating || 3),
+      rad: kind === "rec" ? 25 : 27, tt: kind === "rec" ? (b.score - sMin) / ((sMax - sMin) || 1) : 0, sc: kind === "rec" ? 0.86 + 0.26 * ((b.score - sMin) / ((sMax - sMin) || 1)) : kind === "queue" ? 0.92 : 0.88 + 0.07 * (b.rating || 3),
       gset: new Set([...gs, ...gs.map((g) => gmap.get(g)?.parent).filter(Boolean)]), yr: yearOf(b) });
   };
   data.books.forEach((b) => item(b, "book"));
@@ -122,7 +123,7 @@ function yearOf(b) {
 
 /* ---------- visibility + layout ---------- */
 function visibleGraph() {
-  let ns = nodes.filter((n) => (showRecs || n.kind !== "rec") && (showQueue || n.kind !== "queue"));
+  let ns = nodes.filter((n) => (showRecs || n.kind !== "rec") && (n.kind !== "rec" || n.rank <= recLimit) && (showQueue || n.kind !== "queue"));
   if (mode === "timeline") ns = ns.filter((n) => isItem(n));
   if (mode === "clusters") ns = ns.filter((n) => n.kind !== "root");
   let set = new Set(ns.map((n) => n.id));
@@ -332,29 +333,40 @@ function curve(l, off) {
   return [mx - dy * off, my + dx * off];
 }
 function drawLinks(t) {
-  const k = T.k;
+  const k = T.k, act = hover || selected;
   vLinks.forEach((l, i) => {
-    const a = Math.min(l.s.a, l.t.a) * Math.min(bornScale(l.s, t), bornScale(l.t, t) , 1);
+    const a = Math.min(l.s.a, l.t.a) * Math.min(bornScale(l.s, t), bornScale(l.t, t), 1);
     if (a < 0.02) return;
     const off = l.type === "series" ? 0.12 : l.type === "rec" ? ((i % 2) ? 0.16 : -0.16) : 0.07 * (i % 2 ? 1 : -1);
     const [cx, cy] = curve(l, off);
     const col = l.type === "tree" ? l.t.color : l.t.kind === "rec" ? l.t.color : l.s.color === "#ffd43b" ? l.t.color : l.s.color;
-    const hot = (hover || selected) && (l.s === (hover || selected) || l.t === (hover || selected));
-    ctx.beginPath(); ctx.moveTo(l.s.x, l.s.y); ctx.quadraticCurveTo(cx, cy, l.t.x, l.t.y);
-    if (l.type === "rec") {
-      ctx.setLineDash([7 / k ** 0.3, 7 / k ** 0.3]); ctx.lineDashOffset = reduce ? 0 : -t * 0.012;
-      ctx.strokeStyle = rgba(col, (hot ? 0.95 : 0.6) * a); ctx.lineWidth = Math.max(hot ? 2.4 : 1.6, 1 / k);
+    const hot = act && (l.s === act || l.t === act);
+    const isRec = l.type === "rec", tt = isRec ? l.t.tt : 0, express = isRec && l.t.rank <= 10;
+    const path = () => { ctx.beginPath(); ctx.moveTo(l.s.x, l.s.y); ctx.quadraticCurveTo(cx, cy, l.t.x, l.t.y); };
+    if (express) { // express lane: a soft wide glow under the line
+      path(); ctx.setLineDash([]); ctx.strokeStyle = rgba(col, (0.08 + 0.12 * tt) * a * (hot ? 2 : 1)); ctx.lineWidth = Math.max(8 + 6 * tt, 2 / k); ctx.stroke();
+    }
+    path();
+    if (isRec) {
+      const d = (5 + 7 * (1 - tt)) / k ** 0.3;
+      ctx.setLineDash([d, d]); ctx.lineDashOffset = reduce ? 0 : -t * (0.008 + 0.034 * tt * tt);
+      ctx.strokeStyle = rgba(col, Math.min(1, 0.26 + 0.6 * tt + (hot ? 0.25 : 0)) * a); ctx.lineWidth = Math.max(1.1 + 1.9 * tt + (hot ? 0.8 : 0), 1 / k);
     } else {
       ctx.setLineDash([]);
       ctx.strokeStyle = l.type === "tree" ? rgba(col, 0.42 * a) : l.type === "series" ? rgba(col, (hot ? 0.95 : 0.6) * a) : rgba(col, (l.primary ? 0.34 : 0.15) * a * (hot ? 2.2 : 1));
       ctx.lineWidth = Math.max(l.type === "tree" ? 2.6 : l.type === "series" ? 2 : 1.2, 1 / k);
     }
     ctx.stroke(); ctx.setLineDash([]);
-    if (l.type === "rec" && !reduce && a > 0.3) { // little sparks flowing from the book you read to the recommendation
-      for (let j = 0; j < 2; j++) {
-        const p = ((t * 0.00018 + j * 0.5 + i * 0.13) % 1), q = 1 - p;
-        const x = q * q * l.t.x + 2 * q * p * cx + p * p * l.s.x, y = q * q * l.t.y + 2 * q * p * cy + p * p * l.s.y;
-        ctx.fillStyle = rgba(col, 0.95 * a); ctx.beginPath(); ctx.arc(x, y, 2.6 / Math.sqrt(k), 0, 6.283); ctx.fill();
+    if (isRec && !reduce && a > 0.3) { // sparks travel from the book you read to the recommendation: better picks get more, faster ones
+      const n = 1 + Math.round(tt * 3), speed = 0.00007 + 0.00046 * tt * tt, r = (2.1 + 2.2 * tt) / Math.sqrt(k);
+      const at = (u) => { const q = 1 - u; return [q * q * l.s.x + 2 * q * u * cx + u * u * l.t.x, q * q * l.s.y + 2 * q * u * cy + u * u * l.t.y]; };
+      for (let j = 0; j < n; j++) {
+        const u = (t * speed + j / n + i * 0.13) % 1;
+        if (express) for (let m = 5; m >= 1; m--) { // comet trail
+          const [tx, ty] = at(Math.max(0, u - m * 0.014)); ctx.fillStyle = rgba(col, 0.5 * (1 - m / 6) * a); ctx.beginPath(); ctx.arc(tx, ty, r * (1 - m * 0.12), 0, 6.283); ctx.fill();
+        }
+        const [x, y] = at(u); ctx.fillStyle = rgba(col, 0.95 * a); ctx.beginPath(); ctx.arc(x, y, r, 0, 6.283); ctx.fill();
+        if (express) { ctx.fillStyle = rgba("#ffffff", 0.7 * a); ctx.beginPath(); ctx.arc(x, y, r * 0.45, 0, 6.283); ctx.fill(); }
       }
     }
   });
@@ -407,6 +419,13 @@ function cover(n, x, y, w, h) {
   if (w * T.k > 14) { ctx.fillStyle = "rgba(255,255,255,.88)"; ctx.font = `700 ${w * 0.3}px Fraunces, Georgia, serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(n.title.split(/\s+/).slice(0, 2).map((w) => w[0]).join(""), x + w / 2, y + h / 2); }
 }
+function rankBadge(n, x, y, w, h) { // top-10 picks wear a numbered medal
+  const medal = n.rank === 1 ? "#ffd43b" : n.rank === 2 ? "#dfe3ee" : n.rank === 3 ? "#e8a46b" : null, r = n.rank <= 3 ? 9.5 : 8, bx = x, by = y + h;
+  ctx.beginPath(); ctx.arc(bx, by, r, 0, 6.283); ctx.fillStyle = medal || (C.light ? "#1c2334" : "#0e1426"); ctx.fill();
+  ctx.lineWidth = 1.6; ctx.strokeStyle = medal || n.color; ctx.stroke();
+  ctx.fillStyle = medal ? "#1a1400" : "#ffffff"; ctx.font = `800 ${n.rank > 9 ? 8 : 9.5}px Inter, sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(String(n.rank), bx, by + 0.5);
+}
+
 function drawBook(n, t, s) {
   const isRec = n.kind === "rec", isQ = n.kind === "queue", reading = isQ && n.shelf === "reading";
   const w = 32 * n.sc * s, h = 48 * n.sc * s, x = n.x - w / 2, y = n.y - h / 2, k = T.k;
@@ -419,9 +438,9 @@ function drawBook(n, t, s) {
     ctx.globalAlpha = 1; return;
   }
   const pulse = (isRec || reading) && !reduce ? 0.5 + 0.5 * Math.sin(t * 0.003 + n.x) : 0.5;
-  const gr = h * (lit ? 1.5 : 1.15) + (isRec || reading ? pulse * 6 : 0);
+  const gr = h * (lit ? 1.5 : 1.15 + 0.2 * n.tt * (isRec ? 1 : 0)) + (isRec ? pulse * (4 + 8 * n.tt) : reading ? pulse * 6 : 0);
   const g = ctx.createRadialGradient(n.x, n.y, h * 0.2, n.x, n.y, gr);
-  g.addColorStop(0, reading ? rgba("#ffd43b", (0.3 + pulse * 0.2) * n.a) : rgba(n.color, (lit ? 0.55 : isRec ? 0.2 + pulse * 0.16 : isQ ? 0.14 : 0.26) * n.a)); g.addColorStop(1, rgba(n.color, 0));
+  g.addColorStop(0, reading ? rgba("#ffd43b", (0.3 + pulse * 0.2) * n.a) : rgba(n.color, (lit ? 0.55 : isRec ? 0.13 + 0.22 * n.tt + pulse * (0.07 + 0.15 * n.tt) : isQ ? 0.14 : 0.26) * n.a)); g.addColorStop(1, rgba(n.color, 0));
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(n.x, n.y, gr, 0, 6.283); ctx.fill();
 
   ctx.globalAlpha = n.a * (isRec ? 0.93 : isQ && !reading ? 0.9 : 1);
@@ -432,7 +451,7 @@ function drawBook(n, t, s) {
   ctx.fillStyle = sh; ctx.fillRect(x, y, w, h);
   ctx.restore();
   ctx.beginPath(); ctx.roundRect(x, y, w, h, 3 * s);
-  if (isRec) { ctx.setLineDash([5, 4]); ctx.lineDashOffset = reduce ? 0 : -t * 0.01; ctx.strokeStyle = rgba(n.color, 0.75 + pulse * 0.25); ctx.lineWidth = 2.2; }
+  if (isRec) { ctx.setLineDash([5, 4]); ctx.lineDashOffset = reduce ? 0 : -t * (0.008 + 0.03 * n.tt); ctx.strokeStyle = rgba(n.color, 0.7 + pulse * 0.3); ctx.lineWidth = 2 + 0.9 * n.tt; }
   else if (isQ && !reading) { ctx.setLineDash([1.5, 4]); ctx.lineCap = "round"; ctx.strokeStyle = lit ? "#ffffff" : n.color; ctx.lineWidth = 2.6; }
   else if (reading) { ctx.strokeStyle = "#ffd43b"; ctx.lineWidth = 2.8; }
   else { ctx.strokeStyle = lit ? "#ffffff" : n.color; ctx.lineWidth = lit ? 2.6 : 2; }
@@ -445,6 +464,7 @@ function drawBook(n, t, s) {
     ctx.fillStyle = "#ffd43b"; ctx.beginPath(); const bx = x + w, by = y, br = 6.5;
     for (let i = 0; i < 8; i++) { const a = (i * Math.PI) / 4, rr = i % 2 ? br * 0.42 : br; ctx.lineTo(bx + Math.cos(a) * rr, by + Math.sin(a) * rr); }
     ctx.closePath(); ctx.fill();
+    if (n.rank <= 10 && k > 0.45) rankBadge(n, x, y, w, h);
   } else if (isQ && !reading) { // bookmark ribbon
     const bx = x + w - 11, by = y - 3;
     ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + 9, by); ctx.lineTo(bx + 9, by + 14); ctx.lineTo(bx + 4.5, by + 10); ctx.lineTo(bx, by + 14); ctx.closePath();
@@ -523,7 +543,7 @@ function showTip(n, cx, cy) {
   let h;
   if (isItem(n)) {
     h = `<b>${esc(n.title)}</b><small>${esc(n.author)}${n.year ? " · " + n.year : ""}</small>`;
-    if (n.kind === "rec" && n.reason) h += `<p>✦ ${esc(trunc(n.reason, 120))}</p>`;
+    if (n.kind === "rec") h += `<p class="tipm">★ ${n.score}% match · #${n.rank} of ${data.recs.length}</p>${n.reason ? `<p>✦ ${esc(trunc(n.reason, 110))}</p>` : ""}`;
     else if (n.kind === "queue") h += `<p>${n.shelf === "reading" ? "▶ Reading right now" : "🔖 On my to-read list"}</p>`;
     else if (n.rating) h += `<p><span class="stars">${"★".repeat(n.rating)}<i>${"★".repeat(5 - n.rating)}</i></span></p>`;
   } else h = `<b>${esc(n.name)}</b><small>${n.count} book${n.count === 1 ? "" : "s"} · click to ${focusGenre === n.gid ? "show all" : "isolate"}</small>`;
@@ -546,7 +566,22 @@ function setFocus(g) {
 }
 
 const stars5 = (r) => `<span class="stars" aria-label="${r} of 5 stars">${"★".repeat(r)}<i>${"★".repeat(5 - r)}</i></span>`;
-const thumb = (n) => n.cover ? `<img src="${esc(n.cover)}" alt="" loading="lazy">` : `<span class="ph"></span>`;
+const thumb = (n, w = 34) => A && n.atlas
+  ? `<span class="ph" style="width:${w}px;height:${w * 1.5}px;background:url(${A.src}) no-repeat -${(n.atlas[0] * w) / A.cw}px -${(n.atlas[1] * w) / A.cw}px / ${(A.w * w) / A.cw}px ${(A.h * w) / A.cw}px"></span>`
+  : n.cover ? `<img src="${esc(n.cover)}" alt="" loading="lazy">` : `<span class="ph"></span>`;
+
+function matchHTML(n) {
+  const p = n.parts || {}, N = data.recs.length;
+  const tier = n.rank <= 5 ? "Read this next" : n.rank <= 15 ? "Strong match" : n.rank <= 35 ? "Good match" : "Worth a look";
+  const bar = (label, v, note) => `<div class="part"><span>${label}</span><i style="--w:${v}%"></i><b>${note}</b></div>`;
+  return `<div class="match" style="--c:${n.color}"><div class="mring" style="--p:${n.score}"><b>${n.score}<small>%</small></b></div>
+    <div><strong>#${n.rank} <em>of ${N} picks</em></strong><span>${tier}</span></div></div>
+    <div class="parts">${bar("Taste fit", p.taste, "my call")}${bar("Your ratings", p.ratings, p.avgStars ? p.avgStars + "★ avg of linked books" : "no ratings yet")}${bar("Connections", p.links, (n.because || []).length + " of your books")}</div>`;
+}
+function topPicksHTML() {
+  const top = data.recs.slice().sort((a, b) => a.rank - b.rank).slice(0, 8);
+  return `<h4>Top picks</h4><div class="minis picks">${top.map((r) => { const n = byId.get(r.id); return `<button class="mini" data-go="${esc(n.id)}"><b class="rk" style="--c:${n.color}">${n.rank}</b>${thumb(n, 30)}<span><b>${esc(n.title)}</b><small>${esc(n.author)}</small></span><em class="pct" style="--c:${n.color}">${n.score}%</em></button>`; }).join("")}</div>`;
+}
 const miniBtn = (n, sub) => `<button class="mini" data-go="${esc(n.id)}">${thumb(n)}<span><b>${esc(n.title)}</b><small>${esc(sub ?? n.author)}</small></span></button>`;
 
 function renderPanelVisibility() { $("#panel").classList.toggle("hide", W <= 900 && !selected); }
@@ -573,6 +608,7 @@ function overviewHTML() {
   ${rated.length ? `<h4>How I rate</h4><div class="bars">${hist.map((v, i) => `<div style="height:${(v / hmax) * 100}%;animation-delay:${i * 70}ms" data-t="${i + 1}★ · ${v}"></div>`).join("")}</div><div class="axis"><span>1★</span><span>5★</span></div>` : ""}
   ${yrs.length > 1 ? `<h4>Read per year</h4><div class="bars">${yrs.map((y, i) => `<div style="height:${(y[1] / ymax) * 100}%;animation-delay:${i * 60}ms" data-t="${y[0]} · ${y[1]}"></div>`).join("")}</div><div class="axis"><span>${yrs[0][0]}</span><span>${yrs.at(-1)[0]}</span></div>` : ""}
   <h4>Most-read authors</h4><ul class="authors">${au.map((a) => `<li data-author="${esc(a[0])}"><b>${esc(a[0])}</b><small>${a[1]}</small></li>`).join("")}</ul>
+  ${topPicksHTML()}
   <h4>The key</h4>
   <ul class="key"><li><i class="k-read"></i>Read</li><li><i class="k-reading"></i>Reading now</li><li><i class="k-queue"></i>To read (${data.queue?.length || 0})</li><li><i class="k-rec"></i>Recommended</li></ul>
   <p class="hint">Click anything to dive in. Recommendations are linked to the books that inspired them.</p>`;
@@ -595,6 +631,7 @@ function detailHTML(n) {
   if (facts.length) h += `<div class="facts">${facts.map((f) => `<span>${f}</span>`).join("")}</div>`;
   if (n.blurb) h += `<p class="blurb">${esc(n.blurb)}</p>`;
   if (isRec && n.reason) h += `<div class="why" style="--c:${n.color}">${esc(n.reason)}</div>`;
+  if (isRec) h += matchHTML(n);
   if (gen.length) h += `<h4>Genres</h4><div class="chips">${gen.map((g) => `<button class="chip" style="--c:${g.color}" data-genre="${esc(g.gid)}">${esc(g.name)}</button>`).join("")}</div>`;
   if (isRec) { const bs = (n.because || []).map((id) => byId.get(id)).filter(Boolean); if (bs.length) h += `<h4>Because I read</h4><div class="minis">${bs.map((b) => miniBtn(b)).join("")}</div>`; }
   else {
@@ -640,7 +677,7 @@ function runSearch() {
   searchSet = new Set(items.map((n) => n.id));
   const gen = [...genreNodes.values()].filter((g) => g.name.toLowerCase().includes(s)).slice(0, 3);
   resList = [...items.slice(0, 7), ...gen]; resSel = 0;
-  resEl.innerHTML = resList.length ? resList.map((n, i) => `<li data-i="${i}" class="${i === 0 ? "sel" : ""}" tabindex="-1">${n.cover ? `<img src="${esc(n.cover)}" alt="">` : `<span class="ph"></span>`}<span><b>${esc(n.name)}</b><small>${n.author ? esc(n.author) : (n.count + " books")}</small></span><span class="tag">${n.kind === "rec" ? "✦ rec" : n.kind === "queue" ? (n.shelf === "reading" ? "▶ reading" : "to read") : n.kind === "book" ? "read" : "genre"}</span></li>`).join("") : `<li class="muted">No matches</li>`;
+  resEl.innerHTML = resList.length ? resList.map((n, i) => `<li data-i="${i}" class="${i === 0 ? "sel" : ""}" tabindex="-1">${n.cover ? `<img src="${esc(n.cover)}" alt="">` : `<span class="ph"></span>`}<span><b>${esc(n.name)}</b><small>${n.author ? esc(n.author) : (n.count + " books")}</small></span><span class="tag">${n.kind === "rec" ? "✦ " + n.score + "%" : n.kind === "queue" ? (n.shelf === "reading" ? "▶ reading" : "to read") : n.kind === "book" ? "read" : "genre"}</span></li>`).join("") : `<li class="muted">No matches</li>`;
   resEl.hidden = false;
 }
 function chooseResult(i) {
@@ -659,7 +696,7 @@ q.addEventListener("blur", () => setTimeout(() => { resEl.hidden = true; if (!q.
 
 /* ---------- dock + keyboard ---------- */
 function setQueue(v) { showQueue = v; $("#t-queue").checked = v; if (!v && selected?.kind === "queue") select(null); applyLayout(0.7); }
-function setRecs(v) { showRecs = v; $("#t-recs").checked = v; if (!v && selected?.kind === "rec") select(null); applyLayout(0.7); }
+function setRecs(v) { showRecs = v; $("#t-recs").checked = v; $("#r-limit").disabled = !v; if (!v && selected?.kind === "rec") select(null); applyLayout(0.7); }
 function surprise() {
   const pool = vNodes.filter((n) => n.kind === "rec").concat(showRecs ? [] : vNodes.filter((n) => n.kind === "book"));
   if (!pool.length) return;
@@ -671,6 +708,12 @@ function savePNG() {
 function bindUI() {
   document.querySelectorAll(".modes button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));
   $("#t-recs").addEventListener("change", (e) => setRecs(e.target.checked));
+  const lim = $("#r-limit"), N = data.recs.length; lim.max = N; lim.value = N; let limRaf = 0;
+  lim.addEventListener("input", () => {
+    recLimit = +lim.value; $("#r-val").textContent = recLimit >= N ? "all" : recLimit;
+    if (selected?.kind === "rec" && selected.rank > recLimit) select(null);
+    cancelAnimationFrame(limRaf); limRaf = requestAnimationFrame(() => applyLayout(0.5));
+  });
   $("#t-queue").addEventListener("change", (e) => setQueue(e.target.checked));
   $("#t-labels").addEventListener("change", (e) => (alwaysLabels = e.target.checked));
   $("#b-zoom-in").onclick = () => d3.select(canvas).transition().duration(300).call(zoom.scaleBy, 1.5);
