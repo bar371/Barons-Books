@@ -228,6 +228,17 @@ FIT = {
 }
 
 
+# Taste fit for the to-read shelf (0-100), keyed by Goodreads book id. Claude's judgment of how well each
+# suits what you rate 5 stars. build_graph.py blends it with author affinity + series momentum.
+QFIT = {
+    "54493401": 88, "24611565": 76, "32718027": 70, "234443344": 72, "43728380": 78, "15839976": 88,
+    "195463561": 68, "206101583": 55, "15161": 66, "220175428": 76, "52381770": 92, "203578847": 93,
+    "34392663": 90, "45047384": 52, "52694527": 88, "60531406": 80, "21479290": 74, "25286676": 55,
+    "53655834": 90, "15783514": 62, "102868": 55, "228665": 80, "55399": 86, "9593": 50, "21965714": 66,
+    "21032488": 92, "4929": 52, "9528398": 62, "36099978": 78, "42846882": 66, "54804": 74,
+}
+
+
 def main():
     books = load_read_books()
     ids = {b["id"] for b in books}
@@ -249,7 +260,7 @@ def main():
     for gs in [g for v in SERIES.values() for g in v[0]] + [g for v in BY_TITLE.values() for g in v[0]]:
         assert any(gs in v for v in TREE.values()), gs
     (ROOT / "data" / "curation.json").write_text(
-        json.dumps({"genres": TREE, "books": out_books, "recommendations": recs}, indent=1, ensure_ascii=False), "utf8")
+        json.dumps({"genres": TREE, "books": out_books, "recommendations": recs, "queue_fit": QFIT}, indent=1, ensure_ascii=False), "utf8")
     print(f"{len(out_books)} books tagged, {len(recs)} recommendations")
     if unmapped:
         print("UNMAPPED:", unmapped)

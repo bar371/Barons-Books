@@ -121,6 +121,24 @@ def main():
                           "shelf": "reading" if b["shelf"] == "currently-reading" else "to-read",
                           "genres": genres, "blurb": c.get("blurb"), "cover": covers.get(b["id"])})
 
+    # Read-next score for the to-read shelf = 60% taste fit (Claude's call) + 25% how highly you rate
+    # that author's other books + 15% whether it continues a series you've already read.
+    qfit = cur.get("queue_fit", {})
+    read_series = {b["series"] for b in out_books if b.get("series")}
+    for q in out_queue:
+        if q["shelf"] != "to-read":
+            continue
+        stars = [b["rating"] for b in out_books if b["author"] == q["author"] and b.get("rating")]
+        taste = qfit.get(q["id"], 70)
+        author = round(sum(stars) / len(stars) / 5 * 100) if stars else 70
+        series = 100 if q.get("series") and q["series"] in read_series else 50
+        q["score"] = round(0.6 * taste + 0.25 * author + 0.15 * series)
+        q["parts"] = {"taste": taste, "author": author, "series": series,
+                      "avgStars": round(sum(stars) / len(stars), 1) if stars else None, "nAuthor": len(stars)}
+    ranked = sorted([q for q in out_queue if "score" in q], key=lambda x: (-x["score"], -x["parts"]["taste"], x["title"]))
+    for i, q in enumerate(ranked, 1):
+        q["rank"] = i
+
     ids = {b["id"] for b in out_books}
     out_recs = []
     for r in cur.get("recommendations", []):

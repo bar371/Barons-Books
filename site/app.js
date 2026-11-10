@@ -90,10 +90,12 @@ function build() {
   for (const g of data.genres.filter((g) => g.parent)) genreNodes.set(g.id, add({ id: "g:" + g.id, gid: g.id, kind: "sub", name: g.name, color: g.color, parentG: g.parent, rad: 15, count: g.count, gset: new Set() }));
 
   const sMin = d3.min(data.recs, (r) => r.score) ?? 0, sMax = d3.max(data.recs, (r) => r.score) ?? 1;
+  const qs = (data.queue || []).filter((q) => q.score != null), qMin = d3.min(qs, (q) => q.score) ?? 0, qMax = d3.max(qs, (q) => q.score) ?? 1;
+  const qt = (q) => (q.score == null ? 0 : (q.score - qMin) / ((qMax - qMin) || 1));
   const item = (b, kind) => {
     const gs = b.genres || [], primary = gs[0], macro = primary ? gmap.get(primary)?.parent : null;
     return add({ ...b, kind, name: b.title, genreIds: gs, macroId: macro, color: macro ? gmap.get(macro).color : UNCAT,
-      rad: kind === "rec" ? 25 : 27, tt: kind === "rec" ? (b.score - sMin) / ((sMax - sMin) || 1) : 0, sc: kind === "rec" ? 0.86 + 0.26 * ((b.score - sMin) / ((sMax - sMin) || 1)) : kind === "queue" ? 0.92 : 0.88 + 0.07 * (b.rating || 3),
+      rad: kind === "rec" ? 25 : 27, tt: kind === "rec" ? (b.score - sMin) / ((sMax - sMin) || 1) : kind === "queue" ? qt(b) : 0, sc: kind === "rec" ? 0.86 + 0.26 * ((b.score - sMin) / ((sMax - sMin) || 1)) : kind === "queue" ? 0.9 + 0.1 * qt(b) : 0.88 + 0.07 * (b.rating || 3),
       gset: new Set([...gs, ...gs.map((g) => gmap.get(g)?.parent).filter(Boolean)]), yr: yearOf(b) });
   };
   data.books.forEach((b) => item(b, "book"));
@@ -440,7 +442,7 @@ function drawBook(n, t, s) {
   const pulse = (isRec || reading) && !reduce ? 0.5 + 0.5 * Math.sin(t * 0.003 + n.x) : 0.5;
   const gr = h * (lit ? 1.5 : 1.15 + 0.2 * n.tt * (isRec ? 1 : 0)) + (isRec ? pulse * (4 + 8 * n.tt) : reading ? pulse * 6 : 0);
   const g = ctx.createRadialGradient(n.x, n.y, h * 0.2, n.x, n.y, gr);
-  g.addColorStop(0, reading ? rgba("#ffd43b", (0.3 + pulse * 0.2) * n.a) : rgba(n.color, (lit ? 0.55 : isRec ? 0.13 + 0.22 * n.tt + pulse * (0.07 + 0.15 * n.tt) : isQ ? 0.14 : 0.26) * n.a)); g.addColorStop(1, rgba(n.color, 0));
+  g.addColorStop(0, reading ? rgba("#ffd43b", (0.3 + pulse * 0.2) * n.a) : rgba(n.color, (lit ? 0.55 : isRec ? 0.13 + 0.22 * n.tt + pulse * (0.07 + 0.15 * n.tt) : isQ ? 0.1 + 0.12 * n.tt : 0.26) * n.a)); g.addColorStop(1, rgba(n.color, 0));
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(n.x, n.y, gr, 0, 6.283); ctx.fill();
 
   ctx.globalAlpha = n.a * (isRec ? 0.93 : isQ && !reading ? 0.9 : 1);
@@ -466,6 +468,7 @@ function drawBook(n, t, s) {
     ctx.closePath(); ctx.fill();
     if (n.rank <= 10 && k > 0.45) rankBadge(n, x, y, w, h);
   } else if (isQ && !reading) { // bookmark ribbon
+    if (n.rank <= 5 && k > 0.45) rankBadge(n, x, y, w, h);
     const bx = x + w - 11, by = y - 3;
     ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + 9, by); ctx.lineTo(bx + 9, by + 14); ctx.lineTo(bx + 4.5, by + 10); ctx.lineTo(bx, by + 14); ctx.closePath();
     ctx.fillStyle = "#ffffff"; ctx.fill(); ctx.lineWidth = 1.2; ctx.strokeStyle = n.color; ctx.stroke();
@@ -544,7 +547,7 @@ function showTip(n, cx, cy) {
   if (isItem(n)) {
     h = `<b>${esc(n.title)}</b><small>${esc(n.author)}${n.year ? " · " + n.year : ""}</small>`;
     if (n.kind === "rec") h += `<p class="tipm">★ ${n.score}% match · #${n.rank} of ${data.recs.length}</p>${n.reason ? `<p>✦ ${esc(trunc(n.reason, 110))}</p>` : ""}`;
-    else if (n.kind === "queue") h += `<p>${n.shelf === "reading" ? "▶ Reading right now" : "🔖 On my to-read list"}</p>`;
+    else if (n.kind === "queue") h += `<p>${n.shelf === "reading" ? "▶ Reading right now" : n.rank ? `🔖 Read-next #${n.rank} of ${qCount()} · ${n.score}%` : "🔖 On my to-read list"}</p>`;
     else if (n.rating) h += `<p><span class="stars">${"★".repeat(n.rating)}<i>${"★".repeat(5 - n.rating)}</i></span></p>`;
   } else h = `<b>${esc(n.name)}</b><small>${n.count} book${n.count === 1 ? "" : "s"} · click to ${focusGenre === n.gid ? "show all" : "isolate"}</small>`;
   tip.innerHTML = h; tip.hidden = false;
@@ -570,6 +573,20 @@ const thumb = (n, w = 34) => A && n.atlas
   ? `<span class="ph" style="width:${w}px;height:${w * 1.5}px;background:url(${A.src}) no-repeat -${(n.atlas[0] * w) / A.cw}px -${(n.atlas[1] * w) / A.cw}px / ${(A.w * w) / A.cw}px ${(A.h * w) / A.cw}px"></span>`
   : n.cover ? `<img src="${esc(n.cover)}" alt="" loading="lazy">` : `<span class="ph"></span>`;
 
+const qCount = () => (data.queue || []).filter((q) => q.rank != null).length;
+function readNextHTML(n) {
+  const p = n.parts || {}, N = qCount();
+  const tier = n.rank <= 3 ? "Start here" : n.rank <= 8 ? "Up next" : n.rank <= 20 ? "When the mood strikes" : "Someday";
+  const bar = (label, v, note) => `<div class="part"><span>${label}</span><i style="--w:${v}%"></i><b>${note}</b></div>`;
+  return `<div class="match" style="--c:${n.color}"><div class="mring" style="--p:${n.score}"><b>${n.score}<small>%</small></b></div>
+    <div><strong>#${n.rank} <em>of ${N} to read</em></strong><span>${tier}</span></div></div>
+    <div class="parts">${bar("Taste fit", p.taste, "my call")}${bar("Author", p.author, p.nAuthor ? p.avgStars + "★ avg of " + p.nAuthor + " read" : "new author")}${bar("Series", p.series, p.series === 100 ? "continues a series" : "standalone / new")}</div>`;
+}
+function readNextListHTML() {
+  const top = (data.queue || []).filter((q) => q.rank != null).sort((a, b) => a.rank - b.rank).slice(0, 5);
+  if (!top.length) return "";
+  return `<h4>Read next</h4><div class="minis picks">${top.map((q) => { const n = byId.get(q.id); return `<button class="mini" data-go="${esc(n.id)}"><b class="rk" style="--c:${n.color}">${n.rank}</b>${thumb(n, 30)}<span><b>${esc(n.title)}</b><small>${esc(n.author)}</small></span><em class="pct" style="--c:${n.color}">${n.score}%</em></button>`; }).join("")}</div>`;
+}
 function matchHTML(n) {
   const p = n.parts || {}, N = data.recs.length;
   const tier = n.rank <= 5 ? "Read this next" : n.rank <= 15 ? "Strong match" : n.rank <= 35 ? "Good match" : "Worth a look";
@@ -609,6 +626,7 @@ function overviewHTML() {
   ${yrs.length > 1 ? `<h4>Read per year</h4><div class="bars">${yrs.map((y, i) => `<div style="height:${(y[1] / ymax) * 100}%;animation-delay:${i * 60}ms" data-t="${y[0]} · ${y[1]}"></div>`).join("")}</div><div class="axis"><span>${yrs[0][0]}</span><span>${yrs.at(-1)[0]}</span></div>` : ""}
   <h4>Most-read authors</h4><ul class="authors">${au.map((a) => `<li data-author="${esc(a[0])}"><b>${esc(a[0])}</b><small>${a[1]}</small></li>`).join("")}</ul>
   ${topPicksHTML()}
+  ${readNextListHTML()}
   <h4>The key</h4>
   <ul class="key"><li><i class="k-read"></i>Read</li><li><i class="k-reading"></i>Reading now</li><li><i class="k-queue"></i>To read (${data.queue?.length || 0})</li><li><i class="k-rec"></i>Recommended</li></ul>
   <p class="hint">Click anything to dive in. Recommendations are linked to the books that inspired them.</p>`;
@@ -632,6 +650,7 @@ function detailHTML(n) {
   if (n.blurb) h += `<p class="blurb">${esc(n.blurb)}</p>`;
   if (isRec && n.reason) h += `<div class="why" style="--c:${n.color}">${esc(n.reason)}</div>`;
   if (isRec) h += matchHTML(n);
+  else if (n.kind === "queue" && n.rank) h += readNextHTML(n);
   if (gen.length) h += `<h4>Genres</h4><div class="chips">${gen.map((g) => `<button class="chip" style="--c:${g.color}" data-genre="${esc(g.gid)}">${esc(g.name)}</button>`).join("")}</div>`;
   if (isRec) { const bs = (n.because || []).map((id) => byId.get(id)).filter(Boolean); if (bs.length) h += `<h4>Because I read</h4><div class="minis">${bs.map((b) => miniBtn(b)).join("")}</div>`; }
   else {
