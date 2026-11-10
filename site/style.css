@@ -91,7 +91,7 @@ kbd{font:500 11px var(--ui);padding:1px 6px;border:1px solid var(--line);border-
 .authors li{display:flex;justify-content:space-between;gap:10px;padding:3px 0;cursor:pointer} .authors li:hover b{color:var(--accent)} .authors small{color:var(--muted)}
 .hint{margin-top:18px;color:var(--muted);font-size:12.5px;line-height:1.5}
 
-.dock{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);display:flex;align-items:center;gap:4px;padding:6px 8px;border-radius:16px;max-width:calc(100vw - 24px);overflow-x:auto}
+.dock{position:fixed;left:12px;right:12px;bottom:16px;margin:0 auto;width:max-content;max-width:calc(100vw - 24px);display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px;padding:6px 8px;border-radius:16px}
 .dock button{min-width:36px;height:36px;padding:0 10px;border-radius:10px;font-weight:500;white-space:nowrap;transition:.15s}
 .dock button:hover{background:var(--line)}
 #b-surprise{background:color-mix(in srgb,var(--accent) 22%,transparent)}
