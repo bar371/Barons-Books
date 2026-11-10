@@ -9,7 +9,8 @@
    "Comic Fantasy",
    "Romantasy",
    "Global Fantasy",
-   "Mythic & Literary Fantasy"
+   "Mythic & Literary Fantasy",
+   "Cozy Fantasy"
   ],
   "Science Fiction": [
    "Sci-Fi Adventure",
@@ -20,13 +21,15 @@
   ],
   "Crime & Thriller": [
    "Nordic Noir",
-   "Action Thriller"
+   "Action Thriller",
+   "Classic Mystery"
   ],
   "Literary & Classics": [
    "Magical Realism",
    "Satire & Classics",
    "Western",
-   "Comic Novel"
+   "Comic Novel",
+   "Philosophy"
   ]
  },
  "books": {
@@ -982,6 +985,208 @@
     "Urban Fantasy"
    ],
    "blurb": "Harry Dresden, Chicago's only professional wizard, takes on vampires, fae and worse, with snark."
+  },
+  "228928465": {
+   "genres": [
+    "LitRPG & Gamelit"
+   ],
+   "blurb": "A washed-up ex-cop, his ex-girlfriend's cat and a deadly alien game show that turns Earth into a dungeon."
+  },
+  "54493401": {
+   "genres": [
+    "Sci-Fi Adventure"
+   ],
+   "blurb": "A lone astronaut wakes with no memory and a world to save."
+  },
+  "24611565": {
+   "genres": [
+    "Epic Fantasy",
+    "Global Fantasy"
+   ],
+   "blurb": "A desert city of rival houses, fighting pits and a young man hunting his mother's killers."
+  },
+  "32718027": {
+   "genres": [
+    "Global Fantasy",
+    "Epic Fantasy"
+   ],
+   "blurb": "A con artist in 18th-century Cairo is pulled into the politics of a djinn kingdom."
+  },
+  "234443344": {
+   "genres": [
+    "Dark Fantasy"
+   ],
+   "blurb": "Geralt of Rivia, monster-slayer, and the girl whose fate is tied to his."
+  },
+  "43728380": {
+   "genres": [
+    "Dark Fantasy",
+    "Grimdark"
+   ],
+   "blurb": "A world without sun, ruled by vampires, and the hunter who bears their curse."
+  },
+  "15839976": {
+   "genres": [
+    "Military Sci-Fi",
+    "Dystopian"
+   ],
+   "blurb": "A miner on Mars infiltrates the golden elite who rule the solar system."
+  },
+  "195463561": {
+   "genres": [
+    "Adventure Fantasy"
+   ],
+   "blurb": "Airships, aristocrats and talking cats in a world of towering spires above a deadly surface."
+  },
+  "206101583": {
+   "genres": [
+    "Mythic & Literary Fantasy"
+   ],
+   "blurb": "A short winter tale from the world of Jonathan Strange."
+  },
+  "15161": {
+   "genres": [
+    "Mythic & Literary Fantasy"
+   ],
+   "blurb": "Faerie-touched stories from Susanna Clarke's England."
+  },
+  "220175428": {
+   "genres": [
+    "Epic Fantasy"
+   ],
+   "blurb": "A young sword-for-hire and the ancient forces gathering against his homeland."
+  },
+  "52381770": {
+   "genres": [
+    "Sci-Fi Adventure"
+   ],
+   "blurb": "A security android that has hacked its own governor module and would really rather watch TV."
+  },
+  "203578847": {
+   "genres": [
+    "Epic Fantasy"
+   ],
+   "blurb": "Highstorms, spren and Knights Radiant as a world heads toward its Desolation."
+  },
+  "34392663": {
+   "genres": [
+    "Epic Fantasy",
+    "Grimdark"
+   ],
+   "blurb": "Gwynne's Norse-flavoured epic, centuries after the Faithful and the Fallen."
+  },
+  "45047384": {
+   "genres": [
+    "Cozy Fantasy"
+   ],
+   "blurb": "A caseworker sent to a magical orphanage on a remote island finds a found family."
+  },
+  "52694527": {
+   "genres": [
+    "Epic Fantasy",
+    "Grimdark"
+   ],
+   "blurb": "Viking-age gods, oath-breakers and a band of outcasts in a savage northern land."
+  },
+  "60531406": {
+   "genres": [
+    "Epic Fantasy",
+    "Comic Fantasy"
+   ],
+   "blurb": "A fairy-tale adventure on a sea of spores, narrated with Sanderson's sly wit."
+  },
+  "21479290": {
+   "genres": [
+    "Urban Fantasy"
+   ],
+   "blurb": "A London constable discovers that magic is real and that the Met has a department for it."
+  },
+  "25286676": {
+   "genres": [
+    "Philosophy"
+   ],
+   "blurb": "Marcus Aurelius's private notes on how to live well."
+  },
+  "53655834": {
+   "genres": [
+    "Global Fantasy",
+    "Epic Fantasy"
+   ],
+   "blurb": "A young man from a conquered people trains for vengeance in a society built around war."
+  },
+  "15783514": {
+   "genres": [
+    "Mythic & Literary Fantasy"
+   ],
+   "blurb": "A short, haunting fable of childhood and the uncanny."
+  },
+  "102868": {
+   "genres": [
+    "Classic Mystery"
+   ],
+   "blurb": "The detective's first case: the origin of the world's most famous partnership."
+  },
+  "228665": {
+   "genres": [
+    "Epic Fantasy"
+   ],
+   "blurb": "Three villagers are swept up in a world-spanning struggle against the Dark One."
+  },
+  "55399": {
+   "genres": [
+    "Epic Fantasy",
+    "Grimdark"
+   ],
+   "blurb": "Soldiers, mages and ascendants in the sprawling Malazan Empire."
+  },
+  "9593": {
+   "genres": [
+    "Satire & Classics"
+   ],
+   "blurb": "Vonnegut's million-year view of humanity, narrated from the far future."
+  },
+  "21965714": {
+   "genres": [
+    "Urban Fantasy",
+    "Comic Fantasy"
+   ],
+   "blurb": "Video-game magic and a wry take on the urban-fantasy underworld."
+  },
+  "21032488": {
+   "genres": [
+    "Epic Fantasy"
+   ],
+   "blurb": "An innkeeper recounts the legend of Kvothe, the gifted young man behind the myths."
+  },
+  "4929": {
+   "genres": [
+    "Magical Realism"
+   ],
+   "blurb": "A runaway boy and a man who talks to cats, in twin narratives."
+  },
+  "9528398": {
+   "genres": [
+    "Comic Fantasy"
+   ],
+   "blurb": "Pratchett's flat world on the back of four elephants and a turtle: satire disguised as fantasy."
+  },
+  "42846882": {
+   "genres": [
+    "Nordic Noir"
+   ],
+   "blurb": "A disgraced journalist and a brilliant hacker unearth Sweden's darkest secrets."
+  },
+  "36099978": {
+   "genres": [
+    "Dark Fantasy"
+   ],
+   "blurb": "Geralt of Rivia, monster-slayer, and the girl whose fate is tied to his."
+  },
+  "54804": {
+   "genres": [
+    "Western"
+   ],
+   "blurb": "Two retired Texas Rangers drive a cattle herd north in an epic of friendship and loss."
   }
  },
  "recommendations": [
@@ -1030,21 +1235,6 @@
     "34880234"
    ],
    "reason": "Sharp banter, a vivid city and a mean streak: Abercrombie's cynicism with the heist energy of Kings of the Wyld."
-  },
-  {
-   "id": "rec-gardens-moon",
-   "title": "Gardens of the Moon",
-   "author": "Steven Erikson",
-   "year": 1999,
-   "genres": [
-    "Epic Fantasy",
-    "Grimdark"
-   ],
-   "because": [
-    "9300768",
-    "15750692"
-   ],
-   "reason": "War on a vast scale, soldiers and gods side by side. If The Heroes and Malice work for you, this is the deep end."
   },
   {
    "id": "rec-blacktongue",
@@ -1149,20 +1339,6 @@
     "3428935"
    ],
    "reason": "An orphan trained as an assassin: Assassin's Apprentice's hook at The Warded Man's pace."
-  },
-  {
-   "id": "rec-eye-of-the-world",
-   "title": "The Eye of the World",
-   "author": "Robert Jordan",
-   "year": 1990,
-   "genres": [
-    "Epic Fantasy"
-   ],
-   "because": [
-    "7235533",
-    "22878967"
-   ],
-   "reason": "The long-form epic that Stormlight and Licanius both owe a debt to."
   },
   {
    "id": "rec-emperors-blades",
@@ -1322,20 +1498,6 @@
    "reason": "The witch of the Odyssey, told lyrically; mythology as intimate fiction."
   },
   {
-   "id": "rec-ocean-lane",
-   "title": "The Ocean at the End of the Lane",
-   "author": "Neil Gaiman",
-   "year": 2013,
-   "genres": [
-    "Mythic & Literary Fantasy"
-   ],
-   "because": [
-    "50202953",
-    "2744"
-   ],
-   "reason": "A short, haunting fable of childhood and the uncanny."
-  },
-  {
    "id": "rec-serpent-wings",
    "title": "The Serpent and the Wings of Night",
    "author": "Carissa Broadbent",
@@ -1406,20 +1568,6 @@
    "reason": "A colony of uplifted spiders and a dying humanity: big ideas with Murderbot's humanity and Jemisin's scale."
   },
   {
-   "id": "rec-project-hail-mary",
-   "title": "Project Hail Mary",
-   "author": "Andy Weir",
-   "year": 2021,
-   "genres": [
-    "Sci-Fi Adventure"
-   ],
-   "because": [
-    "32758901",
-    "9969571"
-   ],
-   "reason": "A lone, amnesiac astronaut and a very unexpected friendship, funny and clever like Murderbot."
-  },
-  {
    "id": "rec-memory-empire",
    "title": "A Memory Called Empire",
    "author": "Arkady Martine",
@@ -1475,21 +1623,6 @@
     "7235533"
    ],
    "reason": "Politics, prophecy and ecology on a desert world: Stormlight's scope with The Will of the Many's intrigue."
-  },
-  {
-   "id": "rec-red-rising",
-   "title": "Red Rising",
-   "author": "Pierce Brown",
-   "year": 2014,
-   "genres": [
-    "Military Sci-Fi",
-    "Dystopian"
-   ],
-   "because": [
-    "58416952",
-    "375802"
-   ],
-   "reason": "An infiltrator among a ruling caste, in a brutal academy: Hierarchy's structure with Ender's Game's war games."
   },
   {
    "id": "rec-forever-war",
@@ -1677,20 +1810,6 @@
    "reason": "Two hired killers on the Gold Rush trail, with black humour."
   },
   {
-   "id": "rec-kafka-shore",
-   "title": "Kafka on the Shore",
-   "author": "Haruki Murakami",
-   "year": 2002,
-   "genres": [
-    "Magical Realism"
-   ],
-   "because": [
-    "6443834",
-    "6449422"
-   ],
-   "reason": "Murakami's twin narratives of a runaway boy and a man who talks to cats."
-  },
-  {
    "id": "rec-wind-up-bird",
    "title": "The Wind-Up Bird Chronicle",
    "author": "Haruki Murakami",
@@ -1759,6 +1878,79 @@
     "85306"
    ],
    "reason": "Jack Reacher's debut: a drifter, a small town and a conspiracy."
+  },
+  {
+   "id": "rec-foundryside",
+   "title": "Foundryside",
+   "author": "Robert Jackson Bennett",
+   "year": 2018,
+   "genres": [
+    "Adventure Fantasy",
+    "Epic Fantasy"
+   ],
+   "because": [
+    "2315892",
+    "186074"
+   ],
+   "reason": "A thief, a magic system built on commands and a city of merchant houses: inventive, fast and Lynch-ish."
+  },
+  {
+   "id": "rec-hyperion",
+   "title": "Hyperion",
+   "author": "Dan Simmons",
+   "year": 1989,
+   "genres": [
+    "Sci-Fi Adventure"
+   ],
+   "because": [
+    "7235533",
+    "19161852"
+   ],
+   "reason": "Seven pilgrims, seven stories, one terrible destination: the Canterbury Tales in space."
+  },
+  {
+   "id": "rec-priory-orange-tree",
+   "title": "The Priory of the Orange Tree",
+   "author": "Samantha Shannon",
+   "year": 2019,
+   "genres": [
+    "Epic Fantasy",
+    "Romantasy"
+   ],
+   "because": [
+    "61431922",
+    "15750692"
+   ],
+   "reason": "Dragons, queens and a world-spanning conflict, standalone and complete."
+  },
+  {
+   "id": "rec-gideon-ninth",
+   "title": "Gideon the Ninth",
+   "author": "Tamsyn Muir",
+   "year": 2019,
+   "genres": [
+    "Science Fantasy",
+    "Comic Fantasy"
+   ],
+   "because": [
+    "211721806",
+    "14201"
+   ],
+   "reason": "Necromancers in space, a locked-room mystery and irreverent humour, for fans of Dungeon Crawler Carl's tone."
+  },
+  {
+   "id": "rec-babel",
+   "title": "Babel",
+   "author": "R.F. Kuang",
+   "year": 2022,
+   "genres": [
+    "Mythic & Literary Fantasy"
+   ],
+   "because": [
+    "14201",
+    "50202953"
+   ],
+   "reason": "Dark academia in an alternate Oxford where translation is magic: Strange & Norrell's scholarly England turned political."
   },
   {
    "id": "rec-bourne-identity",

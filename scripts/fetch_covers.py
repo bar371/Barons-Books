@@ -15,7 +15,7 @@ from pathlib import Path
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).parent))
-from build_graph import load_read_books, load_curation, ROOT
+from build_graph import load_read_books, load_queue_books, load_curation, ROOT
 
 UA = {"User-Agent": "Mozilla/5.0 (Barons-Books cover fetcher)"}
 COVERS = ROOT / "site" / "covers"
@@ -132,14 +132,15 @@ def main():
     COVERS.mkdir(parents=True, exist_ok=True)
     cache = json.loads(CACHE.read_text("utf8")) if CACHE.exists() else {}
     cur = load_curation()
-    items = [(b["id"], b["title"], b["author"], b.get("isbn13"), True) for b in load_read_books()]
+    items = [(b["id"], b["title"], b["author"], b.get("isbn13"), True) for b in load_read_books() + load_queue_books()]
     items += [(r["id"], r["title"], r["author"], r.get("isbn13"), False) for r in cur.get("recommendations", [])]
     redo = set(sys.argv[1].split(",")) if len(sys.argv) > 1 else set()
     ov_path = ROOT / "data" / "cover_overrides.json"
     overrides = json.loads(ov_path.read_text("utf8")) if ov_path.exists() else {}
     for id_, title, author, isbn, is_read in items:
         if id_ in overrides and overrides[id_] is None:  # deliberately no art
-            (COVERS / f"{id_}.jpg").unlink(missing_ok=True); cache[id_] = None; continue
+            (COVERS / f"{id_}.jpg").unlink(missing_ok=True); cache[id_] = None
+            CACHE.write_text(json.dumps(cache, indent=1), "utf8"); continue
         if cache.get(id_) and id_ not in redo and id_ not in overrides:
             continue
         if id_ in overrides and not (cache.get(id_) and (COVERS / f"{id_}.jpg").exists() and id_ not in redo):
@@ -178,3 +179,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+    import make_atlas
+    make_atlas.main()

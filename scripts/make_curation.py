@@ -10,14 +10,14 @@ import json, sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from build_graph import ROOT, load_read_books
+from build_graph import ROOT, load_read_books, load_queue_books
 
 TREE = {
     "Fantasy": ["Epic Fantasy", "Grimdark", "Dark Fantasy", "Adventure Fantasy", "Urban Fantasy",
-                "Comic Fantasy", "Romantasy", "Global Fantasy", "Mythic & Literary Fantasy"],
+                "Comic Fantasy", "Romantasy", "Global Fantasy", "Mythic & Literary Fantasy", "Cozy Fantasy"],
     "Science Fiction": ["Sci-Fi Adventure", "Military Sci-Fi", "Dystopian", "Science Fantasy", "LitRPG & Gamelit"],
-    "Crime & Thriller": ["Nordic Noir", "Action Thriller"],
-    "Literary & Classics": ["Magical Realism", "Satire & Classics", "Western", "Comic Novel"],
+    "Crime & Thriller": ["Nordic Noir", "Action Thriller", "Classic Mystery"],
+    "Literary & Classics": ["Magical Realism", "Satire & Classics", "Western", "Comic Novel", "Philosophy"],
 }
 
 # series name -> (genres, blurb)
@@ -55,6 +55,19 @@ SERIES = {
     "Codex Alera": (["Epic Fantasy"], "A boy without magic in a land where everyone commands the furies."),
     "Mistborn": (["Epic Fantasy"], "A heist against a god-emperor, and later a frontier-western spin on the same world."),
     "Elantris": (["Epic Fantasy"], "A once-glorious city of gods is now a plague-ridden ruin."),
+    "The Song of the Shattered Sands": (["Epic Fantasy", "Global Fantasy"], "A desert city of rival houses, fighting pits and a young man hunting his mother's killers."),
+    "The Daevabad Trilogy": (["Global Fantasy", "Epic Fantasy"], "A con artist in 18th-century Cairo is pulled into the politics of a djinn kingdom."),
+    "Empire of the Vampire": (["Dark Fantasy", "Grimdark"], "A world without sun, ruled by vampires, and the hunter who bears their curse."),
+    "Red Rising Saga": (["Military Sci-Fi", "Dystopian"], "A miner on Mars infiltrates the golden elite who rule the solar system."),
+    "Kingdom of Oak and Steel": (["Epic Fantasy"], "A young sword-for-hire and the ancient forces gathering against his homeland."),
+    "Of Blood and Bone": (["Epic Fantasy", "Grimdark"], "Gwynne's Norse-flavoured epic, centuries after the Faithful and the Fallen."),
+    "Cerulean Chronicles": (["Cozy Fantasy"], "A caseworker sent to a magical orphanage on a remote island finds a found family."),
+    "The Bloodsworn Saga": (["Epic Fantasy", "Grimdark"], "Viking-age gods, oath-breakers and a band of outcasts in a savage northern land."),
+    "Hoid's Travails": (["Epic Fantasy", "Comic Fantasy"], "A fairy-tale adventure on a sea of spores, narrated with Sanderson's sly wit."),
+    "Sherlock Holmes": (["Classic Mystery"], "The detective's first case: the origin of the world's most famous partnership."),
+    "The Wheel of Time": (["Epic Fantasy"], "Three villagers are swept up in a world-spanning struggle against the Dark One."),
+    "Malazan Book of the Fallen": (["Epic Fantasy", "Grimdark"], "Soldiers, mages and ascendants in the sprawling Malazan Empire."),
+    "'Mancer": (["Urban Fantasy", "Comic Fantasy"], "Video-game magic and a wry take on the urban-fantasy underworld."),
 }
 BY_TITLE = {  # standalone books
     "Warbreaker": (["Epic Fantasy"], "Two princesses, a god-king and a magic system powered by colour."),
@@ -72,6 +85,14 @@ BY_TITLE = {  # standalone books
     "Norse Mythology": (["Mythic & Literary Fantasy"], "The Norse myths retold by Gaiman."),
     "Jonathan Strange & Mr Norrell": (["Mythic & Literary Fantasy"], "Two magicians bring English magic back during the Napoleonic wars."),
     "Piranesi": (["Mythic & Literary Fantasy"], "A man lives in an endless house of statues and tides, and something is not as it seems."),
+    "Project Hail Mary": (["Sci-Fi Adventure"], "A lone astronaut wakes with no memory and a world to save."),
+    "The Wood at Midwinter": (["Mythic & Literary Fantasy"], "A short winter tale from the world of Jonathan Strange."),
+    "The Ladies of Grace Adieu and Other Stories": (["Mythic & Literary Fantasy"], "Faerie-touched stories from Susanna Clarke's England."),
+    "Meditations": (["Philosophy"], "Marcus Aurelius's private notes on how to live well."),
+    "The Ocean at the End of the Lane": (["Mythic & Literary Fantasy"], "A short, haunting fable of childhood and the uncanny."),
+    "A Study in Scarlet": (["Classic Mystery"], "Holmes and Watson's first case."),
+    "Galapagos": (["Satire & Classics"], "Vonnegut's million-year view of humanity, narrated from the far future."),
+    "Kafka on the Shore": (["Magical Realism"], "A runaway boy and a man who talks to cats, in twin narratives."),
 }
 
 # (slug, title, author, year, genres, because (goodreads ids), reason)
@@ -82,8 +103,6 @@ RECS = [
   "A brutal, charismatic young warlord with a Best Served Cold-style grudge, in a lean, fast book."),
  ("locke-lamora", "The Lies of Locke Lamora", "Scott Lynch", 2006, ["Adventure Fantasy", "Dark Fantasy"], ["2315892", "186074", "34880234"],
   "Sharp banter, a vivid city and a mean streak: Abercrombie's cynicism with the heist energy of Kings of the Wyld."),
- ("gardens-moon", "Gardens of the Moon", "Steven Erikson", 1999, ["Epic Fantasy", "Grimdark"], ["9300768", "15750692"],
-  "War on a vast scale, soldiers and gods side by side. If The Heroes and Malice work for you, this is the deep end."),
  ("blacktongue", "The Blacktongue Thief", "Christopher Buehlman", 2021, ["Adventure Fantasy", "Dark Fantasy"], ["34880234", "186074"],
   "A debt-ridden thief joins a band of killers with a darkly funny voice: Kings of the Wyld meets Kvothe's storytelling."),
  ("senlin", "Senlin Ascends", "Josiah Bancroft", 2013, ["Adventure Fantasy"], ["24876258", "14201"],
@@ -98,8 +117,6 @@ RECS = [
   "A historical-flavoured tale of love and loyalty on opposite sides of a war, with the emotional pull of Robin Hobb."),
  ("way-of-shadows", "The Way of Shadows", "Brent Weeks", 2008, ["Dark Fantasy", "Epic Fantasy"], ["77197", "3428935"],
   "An orphan trained as an assassin: Assassin's Apprentice's hook at The Warded Man's pace."),
- ("eye-of-the-world", "The Eye of the World", "Robert Jordan", 1990, ["Epic Fantasy"], ["7235533", "22878967"],
-  "The long-form epic that Stormlight and Licanius both owe a debt to."),
  ("emperors-blades", "The Emperor's Blades", "Brian Staveley", 2014, ["Epic Fantasy"], ["58416952", "22878967"],
   "Three heirs, one murdered emperor and a monastery of monks: intrigue and training in the vein of Hierarchy."),
  ("sword-kaigen", "The Sword of Kaigen", "M.L. Wang", 2019, ["Global Fantasy", "Epic Fantasy"], ["41952489", "51057191"],
@@ -122,8 +139,6 @@ RECS = [
   "A book that leads to a buried library under the world: Piranesi's strangeness with 1Q84's layered stories."),
  ("circe", "Circe", "Madeline Miller", 2018, ["Mythic & Literary Fantasy"], ["37903770", "50202953"],
   "The witch of the Odyssey, told lyrically; mythology as intimate fiction."),
- ("ocean-lane", "The Ocean at the End of the Lane", "Neil Gaiman", 2013, ["Mythic & Literary Fantasy"], ["50202953", "2744"],
-  "A short, haunting fable of childhood and the uncanny."),
  ("serpent-wings", "The Serpent and the Wings of Night", "Carissa Broadbent", 2023, ["Romantasy"], ["61431922", "209439446"],
   "Deadly trials, vampire politics and a slow-burn romance, for readers who loved Fourth Wing."),
  ("acotar", "A Court of Thorns and Roses", "Sarah J. Maas", 2015, ["Romantasy"], ["61431922"],
@@ -134,8 +149,6 @@ RECS = [
   "Swashbuckling and satire in a single book, with the same loving mockery as Discworld."),
  ("children-time", "Children of Time", "Adrian Tchaikovsky", 2015, ["Sci-Fi Adventure"], ["32758901", "19161852"],
   "A colony of uplifted spiders and a dying humanity: big ideas with Murderbot's humanity and Jemisin's scale."),
- ("project-hail-mary", "Project Hail Mary", "Andy Weir", 2021, ["Sci-Fi Adventure"], ["32758901", "9969571"],
-  "A lone, amnesiac astronaut and a very unexpected friendship, funny and clever like Murderbot."),
  ("memory-empire", "A Memory Called Empire", "Arkady Martine", 2019, ["Sci-Fi Adventure"], ["32758901", "18952341"],
   "A court-intrigue space opera about language and empire, with the politics of The Grace of Kings."),
  ("ancillary-justice", "Ancillary Justice", "Ann Leckie", 2013, ["Sci-Fi Adventure"], ["32758901", "19161852"],
@@ -144,8 +157,6 @@ RECS = [
   "Noir detective meets space opera, with war and politics on a solar-system scale."),
  ("dune", "Dune", "Frank Herbert", 1965, ["Science Fantasy", "Sci-Fi Adventure"], ["58416952", "7235533"],
   "Politics, prophecy and ecology on a desert world: Stormlight's scope with The Will of the Many's intrigue."),
- ("red-rising", "Red Rising", "Pierce Brown", 2014, ["Military Sci-Fi", "Dystopian"], ["58416952", "375802"],
-  "An infiltrator among a ruling caste, in a brutal academy: Hierarchy's structure with Ender's Game's war games."),
  ("forever-war", "The Forever War", "Joe Haldeman", 1974, ["Military Sci-Fi"], ["375802"],
   "The grown-up, bitter counterpart to Ender's Game."),
  ("snow-crash", "Snow Crash", "Neal Stephenson", 1992, ["LitRPG & Gamelit", "Dystopian"], ["9969571"],
@@ -172,8 +183,6 @@ RECS = [
   "A fourteen-year-old hires a U.S. marshal to avenge her father: a witty, clear-eyed western."),
  ("sisters-brothers", "The Sisters Brothers", "Patrick deWitt", 2011, ["Western", "Comic Novel"], ["256008", "13521459"],
   "Two hired killers on the Gold Rush trail, with black humour."),
- ("kafka-shore", "Kafka on the Shore", "Haruki Murakami", 2002, ["Magical Realism"], ["6443834", "6449422"],
-  "Murakami's twin narratives of a runaway boy and a man who talks to cats."),
  ("wind-up-bird", "The Wind-Up Bird Chronicle", "Haruki Murakami", 1994, ["Magical Realism"], ["6443834", "7717482"],
   "Often considered Murakami's masterpiece: a missing cat, a missing wife and a well."),
  ("hundred-years", "One Hundred Years of Solitude", "Gabriel García Márquez", 1967, ["Magical Realism"], ["6443834", "36578942"],
@@ -184,6 +193,16 @@ RECS = [
   "A Greenlandic-Danish outsider investigates a boy's death in snowy Copenhagen."),
  ("killing-floor", "Killing Floor", "Lee Child", 1997, ["Action Thriller"], ["204276", "85306"],
   "Jack Reacher's debut: a drifter, a small town and a conspiracy."),
+ ("foundryside", "Foundryside", "Robert Jackson Bennett", 2018, ["Adventure Fantasy", "Epic Fantasy"], ["2315892", "186074"],
+  "A thief, a magic system built on commands and a city of merchant houses: inventive, fast and Lynch-ish."),
+ ("hyperion", "Hyperion", "Dan Simmons", 1989, ["Sci-Fi Adventure"], ["7235533", "19161852"],
+  "Seven pilgrims, seven stories, one terrible destination: the Canterbury Tales in space."),
+ ("priory-orange-tree", "The Priory of the Orange Tree", "Samantha Shannon", 2019, ["Epic Fantasy", "Romantasy"], ["61431922", "15750692"],
+  "Dragons, queens and a world-spanning conflict, standalone and complete."),
+ ("gideon-ninth", "Gideon the Ninth", "Tamsyn Muir", 2019, ["Science Fantasy", "Comic Fantasy"], ["211721806", "14201"],
+  "Necromancers in space, a locked-room mystery and irreverent humour, for fans of Dungeon Crawler Carl's tone."),
+ ("babel", "Babel", "R.F. Kuang", 2022, ["Mythic & Literary Fantasy"], ["14201", "50202953"],
+  "Dark academia in an alternate Oxford where translation is magic: Strange & Norrell's scholarly England turned political."),
  ("bourne-identity", "The Bourne Identity", "Robert Ludlum", 1980, ["Action Thriller"], ["204276", "93947"],
   "A man with no memory and lethal skills: a classic of the conspiracy thriller."),
 ]
@@ -193,8 +212,9 @@ def main():
     books = load_read_books()
     ids = {b["id"] for b in books}
     out_books, unmapped = {}, []
-    for b in books:
-        g = SERIES.get(b["series"]) or BY_TITLE.get(b["title"])
+    queue = load_queue_books()
+    for b in books + queue:
+        g = SERIES.get(b["series"]) or BY_TITLE.get(b["title"]) or BY_TITLE.get(b["title"].replace("\u00e1", "a")) or BY_TITLE.get(b["title"].split(" (")[0])
         if not g:
             unmapped.append(b["title"]); continue
         out_books[b["id"]] = {"genres": g[0], "blurb": g[1]}

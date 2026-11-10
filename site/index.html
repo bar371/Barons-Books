@@ -9,7 +9,10 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e1426'/%3E%3Cpath d='M32 12l5 13 14 1-11 9 4 14-12-8-12 8 4-14-11-9 14-1z' fill='%23ffd43b'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap">
+<link rel="preload" href="data.json" as="fetch" crossorigin>
+<link rel="preload" href="atlas.jpg" as="image">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap"></noscript>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -41,6 +44,7 @@
 
 <div class="dock glass">
   <label class="switch" title="Show recommended books (R)"><input id="t-recs" type="checkbox" checked><span></span>Recommendations</label>
+  <label class="switch" title="Show my to-read shelf and current read (Q)"><input id="t-queue" type="checkbox" checked><span></span>To read</label>
   <label class="switch" title="Always show titles (T)"><input id="t-labels" type="checkbox"><span></span>Titles</label>
   <i class="sep"></i>
   <button id="b-zoom-in" title="Zoom in" aria-label="Zoom in">＋</button>
@@ -64,9 +68,9 @@
       <li><b>Click</b> to open details · <b>Esc</b> to clear</li>
       <li><b>Click a genre</b> in the legend to isolate it</li>
       <li><kbd>/</kbd> search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> layouts · <kbd>R</kbd> recommendations</li>
-      <li><kbd>T</kbd> titles · <kbd>S</kbd> surprise me · <kbd>D</kbd> theme · <kbd>0</kbd> fit</li>
+      <li><kbd>Q</kbd> to-read shelf · <kbd>T</kbd> titles · <kbd>S</kbd> surprise me · <kbd>D</kbd> theme · <kbd>0</kbd> fit</li>
     </ul>
-    <p class="muted">Solid rings are books I've read. Dashed, softly pulsing rings are recommendations, each tied by a dashed line to the books that inspired it.</p>
+    <p class="muted">Solid rings are books I've read. Dotted rings with a ribbon are on my to-read shelf, and a golden marching ring is what I'm reading now. Dashed, softly pulsing rings are recommendations, tied by a dashed line to the books that inspired them.</p>
     <button id="help-close">Got it</button>
   </div>
 </div>

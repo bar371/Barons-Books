@@ -17,7 +17,7 @@ def main():
     out = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "data" / "_sheets"
     out.mkdir(parents=True, exist_ok=True)
     d = json.loads((SITE / "data.json").read_text("utf8"))
-    items = [(b, "read") for b in d["books"]] + [(r, "rec") for r in d["recs"]]
+    items = [(b, "read") for b in d["books"]] + [(q, "queue") for q in d.get("queue", [])] + [(r, "rec") for r in d["recs"]]
     ov = ROOT / "data" / "cover_overrides.json"
     blank = {k for k, v in (json.loads(ov.read_text("utf8")) if ov.exists() else {}).items() if v is None}
     problems, seen, ok, notes = [], {}, [], []
