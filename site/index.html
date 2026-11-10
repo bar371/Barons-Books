@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Baron's Library · a book constellation</title>
+<meta name="description" content="An interactive map of the books I've read, the genres they belong to, and what to read next.">
+<meta name="theme-color" content="#070a14">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230e1426'/%3E%3Cpath d='M32 12l5 13 14 1-11 9 4 14-12-8-12 8 4-14-11-9 14-1z' fill='%23ffd43b'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="stage" aria-label="Interactive map of books and genres" role="img"></canvas>
+
+<div id="loader"><div class="loader-star"></div><p>Gathering the stars…</p></div>
+
+<header class="brand glass">
+  <h1>Baron's <em>Library</em></h1>
+  <p id="brand-sub">–</p>
+</header>
+
+<div class="search glass">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+  <input id="q" type="search" placeholder="Search books, authors, genres…" autocomplete="off" spellcheck="false" aria-label="Search">
+  <kbd>/</kbd>
+  <ul id="results" class="glass" hidden></ul>
+</div>
+
+<nav class="modes glass" aria-label="Layout">
+  <button data-mode="constellation" class="on" title="Constellation (1)">Constellation</button>
+  <button data-mode="clusters" title="Genre clusters (2)">Clusters</button>
+  <button data-mode="timeline" title="Timeline (3)">Timeline</button>
+</nav>
+
+<aside id="legend" class="legend glass" aria-label="Genres"></aside>
+
+<aside id="panel" class="panel glass" aria-live="polite"></aside>
+
+<div class="dock glass">
+  <label class="switch" title="Show recommended books (R)"><input id="t-recs" type="checkbox" checked><span></span>Recommendations</label>
+  <label class="switch" title="Always show titles (T)"><input id="t-labels" type="checkbox"><span></span>Titles</label>
+  <i class="sep"></i>
+  <button id="b-zoom-in" title="Zoom in" aria-label="Zoom in">＋</button>
+  <button id="b-zoom-out" title="Zoom out" aria-label="Zoom out">−</button>
+  <button id="b-fit" title="Fit all (0)" aria-label="Fit to screen">⤢</button>
+  <i class="sep"></i>
+  <button id="b-surprise" title="Surprise me (S)">✦ Surprise me</button>
+  <button id="b-png" title="Save as image" aria-label="Save as image">⬇</button>
+  <button id="b-theme" title="Light / dark (D)" aria-label="Toggle theme">◐</button>
+  <button id="b-help" title="Shortcuts (?)" aria-label="Shortcuts">?</button>
+</div>
+
+<div id="tip" class="tip" hidden></div>
+
+<div id="help" class="modal" hidden>
+  <div class="card glass">
+    <h2>Getting around</h2>
+    <ul>
+      <li><b>Scroll / pinch</b> zoom · <b>drag</b> pan · drag a book to move it</li>
+      <li><b>Hover</b> a book to light up everything it touches</li>
+      <li><b>Click</b> to open details · <b>Esc</b> to clear</li>
+      <li><b>Click a genre</b> in the legend to isolate it</li>
+      <li><kbd>/</kbd> search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> layouts · <kbd>R</kbd> recommendations</li>
+      <li><kbd>T</kbd> titles · <kbd>S</kbd> surprise me · <kbd>D</kbd> theme · <kbd>0</kbd> fit</li>
+    </ul>
+    <p class="muted">Solid rings are books I've read. Dashed, softly pulsing rings are recommendations, each tied by a dashed line to the books that inspired it.</p>
+    <button id="help-close">Got it</button>
+  </div>
+</div>
+
+<script src="vendor/d3.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

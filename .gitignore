@@ -1,0 +1,6 @@
+.env
+*.env
+__pycache__/
+site/data.json
+data/_sheets/
+data/goodreads_library_export.csv

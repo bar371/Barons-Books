@@ -1,0 +1,5 @@
+{
+  "_help": "id -> image URL to pin a specific cover, or null to deliberately leave a book without art (the page draws a placeholder).",
+  "rec-serpent-wings": "https://covers.openlibrary.org/b/id/14714549-L.jpg?default=false",
+  "75451500": null
+}
