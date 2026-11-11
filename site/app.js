@@ -59,6 +59,7 @@ function loadAtlas(a) {
 
 function init(d) {
   data = d;
+  if (window.LibraryEdits) { try { window.LibraryEdits.apply(d); } catch (e) { console.warn("edits not applied", e); } }
   const atlasP = loadAtlas(d.atlas);
   build();
   resize();
@@ -413,7 +414,7 @@ function fullImg(n) {
   return im;
 }
 function cover(n, x, y, w, h) {
-  if (n.cover && w * T.k >= 70) { const im = fullImg(n); if (im.ok) { ctx.drawImage(im, x, y, w, h); return; } }
+  if (n.cover && (w * T.k >= 70 || !n.atlas)) { const im = fullImg(n); if (im.ok) { ctx.drawImage(im, x, y, w, h); return; } }
   if (atlasReady && n.atlas) { ctx.drawImage(atlasImg, n.atlas[0], n.atlas[1], A.cw, A.ch, x, y, w, h); return; }
   const g = ctx.createLinearGradient(x, y, x + w, y + h);
   g.addColorStop(0, shade(n.color, -0.1)); g.addColorStop(1, shade(n.color, -0.6));
@@ -659,6 +660,7 @@ function detailHTML(n) {
     const sib = nodes.filter((b) => (b.kind === "book" || b.kind === "queue") && b !== n && ((b.series && b.series === n.series) || b.author === n.author)).slice(0, 5);
     if (sib.length) h += `<h4>${n.series ? "In this series / by this author" : "More by this author"}</h4><div class="minis">${sib.map((b) => miniBtn(b, b.series ? b.series + (b.seriesNo ? " #" + b.seriesNo : "") : b.author)).join("")}</div>`;
   }
+  h += window.LibraryEdits?.panelExtra?.(n) || "";
   return h + `<a class="cta" href="${url}" target="_blank" rel="noopener">${isRec ? "Find on" : "Open in"} Goodreads ↗</a>`;
 }
 
@@ -678,7 +680,7 @@ function renderLegend() {
     const subs = data.genres.filter((s) => s.parent === g.id);
     return `<button class="macro ${activeMacro === g.id ? "on" : ""}" style="--c:${g.color}" data-g="${esc(g.id)}"><i></i><span>${esc(g.name)}</span><small>${g.count}</small></button>` +
       (activeMacro === g.id ? `<div class="subs">${subs.map((s) => `<button class="chip ${focusGenre === s.id ? "on" : ""}" style="--c:${s.color}" data-g="${esc(s.id)}">${esc(s.name)} <small>${s.count}</small></button>`).join("")}</div>` : "");
-  }).join("");
+  }).join("") + (window.LibraryEdits?.legendExtra?.() || "");
 }
 $("#legend").addEventListener("click", (e) => {
   if (e.target.closest("[data-clear]")) return setFocus(null);
@@ -713,6 +715,27 @@ q.addEventListener("keydown", (e) => {
 resEl.addEventListener("pointerdown", (e) => { const li = e.target.closest("li[data-i]"); if (li) { e.preventDefault(); chooseResult(+li.dataset.i); } });
 q.addEventListener("blur", () => setTimeout(() => { resEl.hidden = true; if (!q.value) searchSet = null; }, 120));
 
+/* ---------- rebuild after edits (new books, genres, re-tagging) ---------- */
+function recount() {
+  const items = [...data.books, ...data.recs, ...(data.queue || [])], gm = new Map(data.genres.map((g) => [g.id, g]));
+  data.genres.forEach((g) => (g.count = 0));
+  for (const b of items) {
+    for (const g of (b.genres || []).filter((g) => gm.has(g))) { gm.get(g).count++; const m = gm.get(gm.get(g).parent); if (m) m.count++; } // same counting as build_graph.py
+  }
+  data.meta.read = data.books.length; data.meta.queued = (data.queue || []).length; data.meta.recommended = data.recs.length;
+}
+function rebuild() {
+  const old = new Map(nodes.map((n) => [n.id, [n.x, n.y, n.vx, n.vy]]));
+  nodes = []; links = []; byId = new Map(); adj = new Map(); genreNodes = new Map();
+  recount(); build();
+  nodes.forEach((n) => { const p = old.get(n.id); if (p) [n.x, n.y, n.vx, n.vy] = p; });
+  if (focusGenre && !genreNodes.has(focusGenre)) focusGenre = null;
+  selected = selected ? byId.get(selected.id) || null : null; hover = null;
+  $("#brand-sub").textContent = `${data.meta.read} read · ${data.meta.queued || 0} queued · ${data.meta.recommended} recommended`;
+  renderLegend(); renderPanel(); applyLayout(0.8);
+}
+window.Library = { get data() { return data; }, rebuild, select: (id) => select(byId.get(id) || null), node: (id) => byId.get(id), refreshPanel: () => renderPanel(), refreshLegend: () => renderLegend() };
+
 /* ---------- dock + keyboard ---------- */
 function setQueue(v) { showQueue = v; $("#t-queue").checked = v; if (!v && selected?.kind === "queue") select(null); applyLayout(0.7); }
 function setRecs(v) { showRecs = v; $("#t-recs").checked = v; $("#r-limit").disabled = !v; if (!v && selected?.kind === "rec") select(null); applyLayout(0.7); }
@@ -745,7 +768,7 @@ function bindUI() {
   $("#help-close").onclick = () => ($("#help").hidden = true);
   $("#help").addEventListener("click", (e) => { if (e.target.id === "help") e.currentTarget.hidden = true; });
   addEventListener("keydown", (e) => {
-    if (e.target === q) return;
+    if (e.target === q || e.target.closest?.("input, select, textarea")) return;
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     switch (e.key) {
       case "/": e.preventDefault(); q.focus(); break;

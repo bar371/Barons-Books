@@ -1,0 +1,168 @@
+/* Baron's Library: editing layer (add books, add genres, re-tag books).
+   Edits live in an "overlay" that is merged into data.json before the map is built, so the map itself
+   never changes shape. Storage is this browser for now; the Supabase adapter swaps in once login exists.
+   Turn edit mode on with ?edit in the URL (it is remembered on this device). */
+(() => {
+  const KEY = "bl-overlay-v1", EDIT = "bl-edit";
+  const PALETTE = ["#f783ac", "#b197fc", "#74c0fc", "#63e6be", "#ffc078", "#e599f7", "#a9e34b", "#ff8787"];
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+
+  // ---------- storage (swap for Supabase later: same load/save shape) ----------
+  const Store = {
+    load() { try { return Object.assign({ books: [], genres: [], assign: {} }, JSON.parse(ls.get(KEY) || "{}")); } catch { return { books: [], genres: [], assign: {} }; } },
+    save(o) { ls.set(KEY, JSON.stringify(o)); },
+  };
+  let ov = Store.load();
+  if (new URLSearchParams(location.search).has("edit")) ls.set(EDIT, "1");
+  let editing = ls.get(EDIT) === "1";
+
+  // ---------- merge the overlay into data.json ----------
+  function apply(d) {
+    const ids = new Set(d.genres.map((g) => g.id));
+    let pi = d.genres.filter((g) => !g.parent).length;
+    for (const g of ov.genres) {
+      if (ids.has(g.id)) continue;
+      const parent = g.parent && d.genres.find((x) => x.id === g.parent);
+      if (g.parent && !parent) continue;
+      d.genres.push({ id: g.id, name: g.name, parent: g.parent || null, color: parent ? parent.color : PALETTE[pi++ % PALETTE.length], count: 0, custom: true });
+      ids.add(g.id);
+    }
+    const replaced = new Set(ov.books.map((b) => b.replaces).filter(Boolean)); // e.g. a to-read book you've now read
+    d.books = d.books.filter((b) => !replaced.has(b.id)); d.queue = (d.queue || []).filter((b) => !replaced.has(b.id));
+    for (const b of ov.books) {
+      const item = { ...b, genres: (b.genres || []).filter((g) => ids.has(g)), mine: true };
+      if (b.shelf === "read") d.books.push({ ...item, shelf: "read" });
+      else (d.queue = d.queue || []).push({ ...item, shelf: b.shelf === "reading" ? "reading" : "to-read" });
+    }
+    const all = [...d.books, ...d.recs, ...(d.queue || [])];
+    for (const [id, gs] of Object.entries(ov.assign)) { const it = all.find((x) => x.id === id); if (it) it.genres = gs.filter((g) => ids.has(g)); }
+  }
+  function commit(reselect) { Store.save(ov); reload(); if (reselect) window.Library.select(reselect); }
+  // rebuilding from a fresh copy of data.json keeps removals/renames clean
+  let pristine = null;
+  function reload() {
+    const L = window.Library, d = structuredClone(pristine);
+    apply(d); Object.keys(L.data).forEach((k) => delete L.data[k]); Object.assign(L.data, d); L.rebuild();
+  }
+
+  // ---------- helpers ----------
+  const D = () => window.Library.data;
+  const macros = () => D().genres.filter((g) => !g.parent);
+  const subsOf = (m) => D().genres.filter((g) => g.parent === m);
+  const slug = (s) => s.trim().replace(/\s+/g, " ");
+  function genreSelect(cls) {
+    return `<select class="ed-sel ${cls}"><option value="">Add a genre…</option>${macros().map((m) => `<optgroup label="${esc(m.name)}">${subsOf(m.id).map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</optgroup>`).join("")}<option value="__new">＋ New genre…</option></select>`;
+  }
+  function newGenreForm() {
+    return `<div class="ed-new" hidden><input class="ed-gname" placeholder="Genre name" maxlength="40"><select class="ed-gparent">${macros().map((m) => `<option value="${esc(m.id)}">under ${esc(m.name)}</option>`).join("")}<option value="">as a new main genre</option></select><button class="ed-gadd">Add</button></div>`;
+  }
+  function createGenre(name, parent) {
+    name = slug(name); if (!name) return null;
+    const exists = D().genres.find((g) => g.name.toLowerCase() === name.toLowerCase());
+    if (exists) return exists.parent ? exists.id : null;
+    if (!parent) { // a new main genre needs a sub-genre to hold books: use "General"
+      ov.genres.push({ id: name, name, parent: null });
+      const sub = `${name} (general)`; ov.genres.push({ id: sub, name: "General " + name, parent: name }); return sub;
+    }
+    ov.genres.push({ id: name, name, parent }); return name;
+  }
+
+  // ---------- panel: re-tag a book ----------
+  function panelExtra(n) {
+    if (!editing) return n.mine ? `<p class="ed-note">Added on this device · waiting for Claude's genres & picks</p>` : "";
+    const cur = n.genreIds || [];
+    return `<div class="ed-box" data-ed-book="${esc(n.id)}"><h4>Edit genres</h4>
+      <div class="chips">${cur.map((g) => `<span class="chip ed-chip">${esc(D().genres.find((x) => x.id === g)?.name || g)}<button data-ed-rm="${esc(g)}" aria-label="Remove">×</button></span>`).join("") || `<span class="muted">No genre yet</span>`}</div>
+      ${genreSelect("ed-pick")}${newGenreForm()}
+      ${n.mine ? `<button class="ed-del">Remove this book</button>` : ""}
+      <p class="ed-note">${n.mine ? "Added by you · Claude adds genres & picks on the next update" : "Changes recluster the map straight away"}</p></div>`;
+  }
+  function legendExtra() { return editing ? `<button class="ed-add-legend" data-ed-open>＋ Add a book</button>` : ""; }
+  function setGenres(id, gs) { ov.assign[id] = [...new Set(gs)]; const b = ov.books.find((x) => x.id === id); if (b) b.genres = ov.assign[id]; commit(id); }
+
+  document.addEventListener("change", (e) => {
+    const box = e.target.closest("[data-ed-book]"); if (!box || !e.target.classList.contains("ed-pick")) return;
+    const v = e.target.value, n = window.Library.node(box.dataset.edBook);
+    if (v === "__new") { box.querySelector(".ed-new").hidden = false; box.querySelector(".ed-gname").focus(); return; }
+    if (v) setGenres(n.id, [...(n.genreIds || []), v]);
+  });
+  document.addEventListener("click", (e) => {
+    const box = e.target.closest("[data-ed-book]");
+    if (box) {
+      const n = window.Library.node(box.dataset.edBook);
+      const rm = e.target.closest("[data-ed-rm]");
+      if (rm) return setGenres(n.id, (n.genreIds || []).filter((g) => g !== rm.dataset.edRm));
+      if (e.target.closest(".ed-gadd")) { const g = createGenre(box.querySelector(".ed-gname").value, box.querySelector(".ed-gparent").value); if (g) setGenres(n.id, [...(n.genreIds || []), g]); return; }
+      if (e.target.closest(".ed-del") && confirm(`Remove "${n.title}" from your library?`)) { ov.books = ov.books.filter((b) => b.id !== n.id); delete ov.assign[n.id]; commit(null); window.Library.select(null); return; }
+    }
+    if (e.target.closest("[data-ed-open]")) openAdd();
+    if (e.target.closest("#b-edit")) setEditing(!editing);
+  });
+
+  // ---------- add a book (Open Library search) ----------
+  const modal = document.createElement("div");
+  modal.id = "addbook"; modal.className = "modal"; modal.hidden = true;
+  modal.innerHTML = `<div class="card glass add-card"><h2>Add a book</h2>
+    <input id="ab-q" placeholder="Search by title or author…" autocomplete="off"><ul id="ab-res" class="ab-res"></ul>
+    <div id="ab-form" hidden></div><button class="ab-close" aria-label="Close">✕</button></div>`;
+  document.body.appendChild(modal);
+  const abq = modal.querySelector("#ab-q"), abres = modal.querySelector("#ab-res"), abform = modal.querySelector("#ab-form");
+  let timer = 0, results = [], pick = null, ctl = null;
+  function openAdd() { modal.hidden = false; abform.hidden = true; abres.innerHTML = ""; abq.value = ""; setTimeout(() => abq.focus(), 30); }
+  function closeAdd() { modal.hidden = true; }
+  modal.addEventListener("click", (e) => { if (e.target === modal || e.target.closest(".ab-close")) closeAdd(); });
+  addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) { e.stopPropagation(); closeAdd(); } }, true);
+  abq.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(search, 350); });
+  async function search() {
+    const s = abq.value.trim(); if (s.length < 3) { abres.innerHTML = ""; return; }
+    ctl?.abort(); ctl = new AbortController();
+    abres.innerHTML = `<li class="muted">Searching…</li>`;
+    try {
+      const r = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(s)}&fields=key,title,author_name,first_publish_year,cover_i,isbn,number_of_pages_median&limit=8`, { signal: ctl.signal });
+      results = (await r.json()).docs || [];
+      abres.innerHTML = results.length ? results.map((b, i) => `<li data-i="${i}">${b.cover_i ? `<img src="https://covers.openlibrary.org/b/id/${b.cover_i}-S.jpg" alt="">` : `<span class="ph"></span>`}<span><b>${esc(b.title)}</b><small>${esc((b.author_name || []).join(", "))}${b.first_publish_year ? " · " + b.first_publish_year : ""}</small></span></li>`).join("") : `<li class="muted">No matches on Open Library</li>`;
+    } catch (err) { if (err.name !== "AbortError") abres.innerHTML = `<li class="muted">Search failed, try again</li>`; }
+  }
+  abres.addEventListener("click", (e) => {
+    const li = e.target.closest("li[data-i]"); if (!li) return;
+    pick = results[+li.dataset.i]; abres.innerHTML = "";
+    const have = pick.have = [...D().books, ...(D().queue || [])].find((b) => b.title.toLowerCase().split(" (")[0] === pick.title.toLowerCase());
+    abform.hidden = false;
+    abform.innerHTML = `<div class="ab-pick">${pick.cover_i ? `<img src="https://covers.openlibrary.org/b/id/${pick.cover_i}-M.jpg" alt="">` : ""}<div><b>${esc(pick.title)}</b><small>${esc((pick.author_name || [])[0] || "")}</small>${have ? `<p class="ed-note">Already on your map as “${esc(have.title)}”: saving moves it to the shelf you pick.</p>` : ""}</div></div>
+      <div class="ab-row"><label><input type="radio" name="ab-shelf" value="read" checked> Read</label><label><input type="radio" name="ab-shelf" value="to-read"> To read</label><label><input type="radio" name="ab-shelf" value="reading"> Reading now</label></div>
+      <div class="ab-row ab-stars">${[1, 2, 3, 4, 5].map((r) => `<button data-star="${r}" aria-label="${r} stars">★</button>`).join("")}<small>your rating</small></div>
+      <div class="ab-row">${genreSelect("ab-genre")}</div>${newGenreForm()}
+      <button class="ab-save">Add to my library</button>`;
+    abform.dataset.r = "0";
+  });
+  abform.addEventListener("click", (e) => {
+    const st = e.target.closest("[data-star]");
+    if (st) { abform.dataset.r = st.dataset.star; abform.querySelectorAll("[data-star]").forEach((b) => b.classList.toggle("on", +b.dataset.star <= +st.dataset.star)); return; }
+    if (e.target.closest(".ed-gadd")) { const g = createGenre(abform.querySelector(".ed-gname").value, abform.querySelector(".ed-gparent").value); if (g) { Store.save(ov); abform.dataset.g = g; abform.querySelector(".ed-new").hidden = true; abform.querySelector(".ab-genre").outerHTML = `<span class="chip">${esc(abform.querySelector(".ed-gname").value)}</span>`; } return; }
+    if (!e.target.closest(".ab-save")) return;
+    const shelf = abform.querySelector("[name=ab-shelf]:checked").value, sel = abform.querySelector(".ab-genre");
+    const g = abform.dataset.g || (sel && sel.value && sel.value !== "__new" ? sel.value : null);
+    const id = "ol-" + pick.key.split("/").pop();
+    if (ov.books.some((b) => b.id === id)) { closeAdd(); window.Library.select(id); return; }
+    ov.books.push({ id, olKey: pick.key, title: pick.title, author: (pick.author_name || ["Unknown"])[0], year: pick.first_publish_year || null,
+      pages: pick.number_of_pages_median || null, isbn13: (pick.isbn || []).find((x) => /^978[01]/.test(x)) || (pick.isbn || []).find((x) => x.length === 13) || null,
+      cover: pick.cover_i ? `https://covers.openlibrary.org/b/id/${pick.cover_i}-L.jpg` : null,
+      replaces: pick.have && !pick.have.mine ? pick.have.id : undefined, shelf, rating: shelf === "read" ? +abform.dataset.r || null : null, genres: g ? [g] : pick.have ? pick.have.genres || [] : [],
+      dateRead: shelf === "read" ? new Date().toISOString().slice(0, 10) : null, added: new Date().toISOString(), pending: true });
+    closeAdd(); commit(id);
+  });
+  abform.addEventListener("change", (e) => { if (e.target.classList.contains("ab-genre") && e.target.value === "__new") { abform.querySelector(".ed-new").hidden = false; abform.querySelector(".ed-gname").focus(); } });
+
+  // ---------- edit mode toggle in the dock ----------
+  function setEditing(v) { editing = v; ls.set(EDIT, v ? "1" : "0"); document.body.classList.toggle("editing", v); const b = document.querySelector("#b-edit"); if (b) b.classList.toggle("on", v); window.Library.refreshPanel(); window.Library.refreshLegend(); }
+  function mountDock() {
+    const dock = document.querySelector(".dock"); if (!dock || document.querySelector("#b-edit") || ls.get(EDIT) == null) return; // only on devices that opened ?edit once
+    const add = document.createElement("button"); add.id = "b-add"; add.dataset.edOpen = ""; add.title = "Add a book"; add.textContent = "＋ Book";
+    const ed = document.createElement("button"); ed.id = "b-edit"; ed.title = "Edit mode"; ed.setAttribute("aria-label", "Edit mode"); ed.textContent = "✎";
+    dock.insertBefore(ed, document.querySelector("#b-help")); dock.insertBefore(add, ed);
+    ed.classList.toggle("on", editing); document.body.classList.toggle("editing", editing);
+  }
+
+  window.LibraryEdits = { apply(d) { pristine = structuredClone(d); apply(d); mountDock(); }, panelExtra, legendExtra, get editing() { return editing; } };
+})();
