@@ -204,35 +204,56 @@
     b.title = u ? "Account and libraries" : "Sign in"; b.textContent = u ? "◉ Account" : "Sign in";
     dock.insertBefore(b, document.querySelector("#b-help"));
     b.onclick = openAccount;
+    if (sessionStorage.getItem("bl-welcome")) { sessionStorage.removeItem("bl-welcome"); setTimeout(() => toast("Welcome! Your email is confirmed."), 800); if (!ctx.isMine) window.Cloud.me().then((me) => me && go(me.slug)); }
+    const linkErr = sessionStorage.getItem("bl-link-error"); if (linkErr) { sessionStorage.removeItem("bl-link-error"); setTimeout(() => toast("Link problem: " + linkErr), 800); }
     const owner = ctx.profile?.display_name || "Baron", h1 = document.querySelector(".brand h1");
     if (h1) h1.innerHTML = `${esc(owner)}'s <em>Library</em>`;
     document.title = `${owner}'s Library`;
   }
   const acct = document.createElement("div"); acct.id = "account"; acct.className = "modal"; acct.hidden = true; document.body.appendChild(acct);
   acct.addEventListener("click", (e) => { if (e.target === acct || e.target.closest(".ab-close")) acct.hidden = true; });
+  function loginForm(signup) {
+    const C = window.Cloud;
+    acct.innerHTML = `<form class="card glass add-card login"><h2>${signup ? "Create your library" : "Sign in"}</h2>
+      <p class="muted">${signup ? "Map your own reading: add books, build genres, and get picks. You'll stay signed in on this device." : "Sign in to edit your library. You'll stay signed in on this device."}</p>
+      ${signup ? `<input name="name" placeholder="Your name (shown as “Name's Library”)" maxlength="40" autocomplete="given-name" required>` : ""}
+      <input name="email" type="email" placeholder="Email" autocomplete="username" required>
+      <input name="pw" type="password" placeholder="Password${signup ? " (at least 6 characters)" : ""}" minlength="${signup ? 6 : 1}" autocomplete="${signup ? "new-password" : "current-password"}" required>
+      <p class="err" hidden></p><button class="ab-save" type="submit">${signup ? "Create account" : "Sign in"}</button>
+      <p class="switch-auth">${signup ? `Already have an account? <a href="#" data-auth="in">Sign in</a>` : `New here? <a href="#" data-auth="up">Create an account</a>`}</p>
+      <button class="ab-close" type="button" aria-label="Close">✕</button></form>`;
+    const f = acct.querySelector("form"), btn = f.querySelector(".ab-save"), err = f.querySelector(".err");
+    setTimeout(() => (signup ? f.name : f.email).focus(), 30);
+    f.querySelector("[data-auth]").onclick = (e) => { e.preventDefault(); loginForm(!signup); };
+    f.onsubmit = async (e) => {
+      e.preventDefault(); err.hidden = true; btn.disabled = true; btn.textContent = signup ? "Creating…" : "Signing in…";
+      try {
+        if (signup) {
+          const r = await C.signUp(f.name.value.trim(), f.email.value.trim(), f.pw.value);
+          if (r === "confirm") { f.innerHTML = `<h2>Check your email</h2><p class="muted">We sent a confirmation link to <b>${esc(f.email.value)}</b>. Open it on this device and you'll land in your new library.</p><button class="ab-close" type="button" aria-label="Close">✕</button>`; return; }
+        } else await C.signIn(f.email.value.trim(), f.pw.value);
+        const me = await C.me(); go(me?.slug);
+      } catch (x) {
+        err.textContent = /invalid login/i.test(x.message) ? "Wrong email or password." : /already registered|exists/i.test(x.message) ? "That email already has an account. Sign in instead." : /not confirmed/i.test(x.message) ? "Please confirm your email first (check your inbox)." : x.message;
+        err.hidden = false; btn.disabled = false; btn.textContent = signup ? "Create account" : "Sign in";
+      }
+    };
+  }
   async function openAccount() {
     const C = window.Cloud; acct.hidden = false;
-    if (!C.user) {
-      acct.innerHTML = `<form class="card glass add-card login"><h2>Sign in</h2><p class="muted">Sign in to edit your library. You'll stay signed in on this device.</p>
-        <input name="email" type="email" placeholder="Email" autocomplete="username" required><input name="pw" type="password" placeholder="Password" autocomplete="current-password" required>
-        <p class="err" hidden></p><button class="ab-save" type="submit">Sign in</button><button class="ab-close" type="button" aria-label="Close">✕</button></form>`;
-      const f = acct.querySelector("form"); setTimeout(() => f.email.focus(), 30);
-      f.onsubmit = async (e) => {
-        e.preventDefault(); const err = f.querySelector(".err"); err.hidden = true; f.querySelector(".ab-save").textContent = "Signing in…";
-        try { await C.signIn(f.email.value.trim(), f.pw.value); const me = await C.me(); go(me?.slug); }
-        catch (x) { err.textContent = /invalid/i.test(x.message) ? "Wrong email or password." : x.message; err.hidden = false; f.querySelector(".ab-save").textContent = "Sign in"; }
-      };
-      return;
-    }
+    if (!C.user) return loginForm(false);
     const ps = await C.profiles(), me = await C.me();
     acct.innerHTML = `<div class="card glass add-card"><h2>${esc(me?.display_name || C.user.email)}</h2><p class="muted">${esc(C.user.email)}</p>
       <h4>Libraries</h4><ul class="ab-res libs">${ps.map((p) => `<li data-lib="${esc(p.slug)}" class="${p.slug === ctx.slug ? "on" : ""}"><span><b>${esc(p.display_name)}'s Library</b><small>${p.id === me?.id ? "yours" : p.is_public ? "public" : "private"}</small></span></li>`).join("") || `<li class="muted">No libraries yet: run supabase/schema.sql and add profiles</li>`}</ul>
       ${me ? `<button class="ed-del req">Update my picks now</button>` : ""}
+      ${me ? `<button class="ed-del vis">${me.is_public ? "Make my map private" : "Make my map public"}</button>` : ""}
       <button class="ed-del out">Sign out</button><button class="ab-close" aria-label="Close">✕</button></div>`;
     acct.querySelector(".libs").onclick = (e) => { const li = e.target.closest("[data-lib]"); if (li) go(li.dataset.lib); };
     acct.querySelector(".out").onclick = async () => { await C.signOut(); go(null); };
+    const vis = acct.querySelector(".vis");
+    if (vis) vis.onclick = async () => { try { await C.setPublic(!me.is_public); toast(me.is_public ? "Your map is now private" : "Your map is now public"); acct.hidden = true; } catch (x) { toast("Couldn't change: " + x.message); } };
     const rq = acct.querySelector(".req");
-    if (rq) rq.onclick = async () => { try { await C.requestRefresh(); rq.textContent = "Requested: Claude picks it up on the next run"; } catch (x) { rq.textContent = /duplicate|unique|409/i.test(x.message) ? "Already requested" : "Couldn't request: " + x.message; } rq.disabled = true; };
+    if (rq) rq.onclick = async () => { try { await C.requestRefresh(); rq.textContent = "Requested: Claude picks it up on the next run"; } catch (x) { rq.textContent = /duplicate|unique|409/i.test(x.message) ? "Already requested" : /row-level|policy|403/i.test(x.message) ? "Picks from Claude are invite-only for now: ask Baron" : "Couldn't request: " + x.message; } rq.disabled = true; };
   }
 
   window.LibraryEdits = { loadData, apply(d) { pristine = structuredClone(d); apply(d); mountDock(); mountAccount(); }, panelExtra, legendExtra, get editing() { return editing; } };

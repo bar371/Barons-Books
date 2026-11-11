@@ -195,3 +195,4 @@ kbd{font:500 11px var(--ui);padding:1px 6px;border:1px solid var(--line);border-
 .modal .ab-close{background:transparent;color:var(--muted);margin:0;padding:0;font-weight:400}
 .modal .ab-close:hover{background:var(--line)}
 .modal .ed-del{background:transparent;color:var(--muted);margin-right:8px}
+.switch-auth{margin-top:12px;font-size:13px;color:var(--muted)} .switch-auth a{color:var(--accent);font-weight:600}

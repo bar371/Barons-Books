@@ -14,6 +14,20 @@
     ls.set(SKEY, session ? JSON.stringify(session) : null);
   };
 
+  // coming back from a confirmation / magic link: the tokens arrive in the URL hash
+  (function fromLink() {
+    const h = new URLSearchParams(location.hash.slice(1));
+    if (!h.has("access_token") && !h.has("error_description")) return;
+    if (h.has("access_token")) {
+      try {
+        const claims = JSON.parse(atob(h.get("access_token").split(".")[1].replace(/-/g, "+").replace(/_/g, "/")));
+        keep({ access_token: h.get("access_token"), refresh_token: h.get("refresh_token"), expires_in: +h.get("expires_in") || 3600, user: { id: claims.sub, email: claims.email } });
+        sessionStorage.setItem("bl-welcome", "1");
+      } catch {}
+    } else sessionStorage.setItem("bl-link-error", h.get("error_description"));
+    history.replaceState(null, "", location.pathname + location.search);
+  })();
+
   async function call(path, opts = {}, ms = 6000) {
     const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms);
     try {
@@ -51,6 +65,13 @@
       keep(await call("/auth/v1/token?grant_type=password", { method: "POST", body: JSON.stringify({ email, password }) }));
       profiles = null; return session.user;
     },
+    // returns "signed-in" when the project doesn't require email confirmation, else "confirm"
+    async signUp(name, email, password) {
+      const back = encodeURIComponent(location.origin + location.pathname);
+      const r = await call(`/auth/v1/signup?redirect_to=${back}`, { method: "POST", body: JSON.stringify({ email, password, data: { display_name: name } }) });
+      if (r?.access_token) { keep(r); profiles = null; return "signed-in"; }
+      return "confirm";
+    },
     async signOut() {
       const t = session?.access_token;
       keep(null); profiles = null;
@@ -73,6 +94,11 @@
       if (!session) throw new Error("Not signed in");
       await rest("/edits?on_conflict=user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify({ user_id: session.user.id, data, updated_at: new Date().toISOString() }) });
+    },
+    async setPublic(v) {
+      if (!session) throw new Error("Not signed in");
+      await rest(`/profiles?id=eq.${session.user.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ is_public: v }) });
+      profiles = null;
     },
     async requestRefresh(note) {
       if (!session) throw new Error("Not signed in");
