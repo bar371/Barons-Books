@@ -8,14 +8,46 @@
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 
-  // ---------- storage (swap for Supabase later: same load/save shape) ----------
-  const Store = {
-    load() { try { return Object.assign({ books: [], genres: [], assign: {} }, JSON.parse(ls.get(KEY) || "{}")); } catch { return { books: [], genres: [], assign: {} }; } },
-    save(o) { ls.set(KEY, JSON.stringify(o)); },
-  };
-  let ov = Store.load();
+  // ---------- storage: Supabase when you're signed in to your own library, else this browser ----------
+  const EMPTY = () => ({ books: [], genres: [], assign: {} });
+  const norm = (o) => Object.assign(EMPTY(), o || {});
+  const local = () => { try { return norm(JSON.parse(ls.get(KEY) || "{}")); } catch { return EMPTY(); } };
+  let ctx = { slug: "baron", profile: null, isMine: false, ok: false };
+  let ov = EMPTY();
   if (new URLSearchParams(location.search).has("edit")) ls.set(EDIT, "1");
-  let editing = ls.get(EDIT) === "1";
+  const canEdit = () => ctx.isMine || (!ctx.ok && ls.get(EDIT) != null); // offline fallback: ?edit keeps local editing
+  let editing = false;
+  const Store = {
+    async save(o) {
+      if (ctx.isMine) {
+        try { await window.Cloud.saveEdits(o); toast("Saved"); }
+        catch (e) { ls.set(KEY + ":" + ctx.slug, JSON.stringify(o)); toast("Couldn't save to the cloud (" + e.message + "), kept on this device"); }
+      } else ls.set(KEY, JSON.stringify(o));
+    },
+  };
+  function toast(msg) {
+    let t = document.querySelector("#toast"); if (!t) { t = document.createElement("div"); t.id = "toast"; t.className = "toast glass"; document.body.appendChild(t); }
+    t.textContent = msg; t.classList.add("on"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 2600);
+  }
+
+  // ---------- which library, and its data ----------
+  const emptyBase = (d) => ({ ...d, books: [], recs: [], queue: [], genres: d.genres.map((g) => ({ ...g, count: 0 })), meta: { read: 0, queued: 0, recommended: 0 } });
+  async function loadData() {
+    const get = () => fetch("data.json", { cache: "no-cache" }).then((r) => r.json());
+    if (!window.Cloud) return get();
+    const [c, base] = await Promise.all([window.Cloud.resolve().catch(() => ctx), get()]);
+    ctx = c;
+    let d = base;
+    if (ctx.slug !== "baron") d = await fetch(`libraries/${ctx.slug}.json`, { cache: "no-cache" }).then((r) => (r.ok ? r.json() : emptyBase(base))).catch(() => emptyBase(base));
+    if (ctx.profile) {
+      const remote = await window.Cloud.loadEdits(ctx.profile.id);
+      ov = norm(remote);
+      const old = local(); // first sign-in: move edits made on this device into the cloud
+      if (ctx.isMine && !remote && (old.books.length || old.genres.length || Object.keys(old.assign).length)) { ov = old; Store.save(ov).then(() => ls.set(KEY, "{}")); }
+    } else ov = local();
+    d.meta = { ...d.meta, owner: ctx.profile?.display_name || "Baron" };
+    return d;
+  }
 
   // ---------- merge the overlay into data.json ----------
   function apply(d) {
@@ -38,7 +70,7 @@
     const all = [...d.books, ...d.recs, ...(d.queue || [])];
     for (const [id, gs] of Object.entries(ov.assign)) { const it = all.find((x) => x.id === id); if (it) it.genres = gs.filter((g) => ids.has(g)); }
   }
-  function commit(reselect) { Store.save(ov); reload(); if (reselect) window.Library.select(reselect); }
+  function commit(reselect) { if (!canEdit()) return; Store.save(ov); reload(); if (reselect) window.Library.select(reselect); }
   // rebuilding from a fresh copy of data.json keeps removals/renames clean
   let pristine = null;
   function reload() {
@@ -155,14 +187,53 @@
   abform.addEventListener("change", (e) => { if (e.target.classList.contains("ab-genre") && e.target.value === "__new") { abform.querySelector(".ed-new").hidden = false; abform.querySelector(".ed-gname").focus(); } });
 
   // ---------- edit mode toggle in the dock ----------
-  function setEditing(v) { editing = v; ls.set(EDIT, v ? "1" : "0"); document.body.classList.toggle("editing", v); const b = document.querySelector("#b-edit"); if (b) b.classList.toggle("on", v); window.Library.refreshPanel(); window.Library.refreshLegend(); }
+  function setEditing(v) { editing = v && canEdit(); document.body.classList.toggle("editing", v); const b = document.querySelector("#b-edit"); if (b) b.classList.toggle("on", v); window.Library.refreshPanel(); window.Library.refreshLegend(); }
   function mountDock() {
-    const dock = document.querySelector(".dock"); if (!dock || document.querySelector("#b-edit") || ls.get(EDIT) == null) return; // only on devices that opened ?edit once
+    const dock = document.querySelector(".dock"); if (!dock || document.querySelector("#b-edit") || !canEdit()) return; // only for the library's owner
     const add = document.createElement("button"); add.id = "b-add"; add.dataset.edOpen = ""; add.title = "Add a book"; add.textContent = "＋ Book";
     const ed = document.createElement("button"); ed.id = "b-edit"; ed.title = "Edit mode"; ed.setAttribute("aria-label", "Edit mode"); ed.textContent = "✎";
     dock.insertBefore(ed, document.querySelector("#b-help")); dock.insertBefore(add, ed);
     ed.classList.toggle("on", editing); document.body.classList.toggle("editing", editing);
   }
 
-  window.LibraryEdits = { apply(d) { pristine = structuredClone(d); apply(d); mountDock(); }, panelExtra, legendExtra, get editing() { return editing; } };
+  // ---------- account: sign in, switch library, sign out ----------
+  const go = (lib) => { const p = new URLSearchParams(location.search); p.delete("edit"); lib ? p.set("lib", lib) : p.delete("lib"); const q = p.toString(); location.href = location.pathname + (q ? "?" + q : ""); };
+  function mountAccount() {
+    const dock = document.querySelector(".dock"); if (!dock || document.querySelector("#b-acct")) return;
+    const b = document.createElement("button"); b.id = "b-acct"; const u = window.Cloud?.user;
+    b.title = u ? "Account and libraries" : "Sign in"; b.textContent = u ? "◉ Account" : "Sign in";
+    dock.insertBefore(b, document.querySelector("#b-help"));
+    b.onclick = openAccount;
+    const owner = ctx.profile?.display_name || "Baron", h1 = document.querySelector(".brand h1");
+    if (h1) h1.innerHTML = `${esc(owner)}'s <em>Library</em>`;
+    document.title = `${owner}'s Library`;
+  }
+  const acct = document.createElement("div"); acct.id = "account"; acct.className = "modal"; acct.hidden = true; document.body.appendChild(acct);
+  acct.addEventListener("click", (e) => { if (e.target === acct || e.target.closest(".ab-close")) acct.hidden = true; });
+  async function openAccount() {
+    const C = window.Cloud; acct.hidden = false;
+    if (!C.user) {
+      acct.innerHTML = `<form class="card glass add-card login"><h2>Sign in</h2><p class="muted">Sign in to edit your library. You'll stay signed in on this device.</p>
+        <input name="email" type="email" placeholder="Email" autocomplete="username" required><input name="pw" type="password" placeholder="Password" autocomplete="current-password" required>
+        <p class="err" hidden></p><button class="ab-save" type="submit">Sign in</button><button class="ab-close" type="button" aria-label="Close">✕</button></form>`;
+      const f = acct.querySelector("form"); setTimeout(() => f.email.focus(), 30);
+      f.onsubmit = async (e) => {
+        e.preventDefault(); const err = f.querySelector(".err"); err.hidden = true; f.querySelector(".ab-save").textContent = "Signing in…";
+        try { await C.signIn(f.email.value.trim(), f.pw.value); const me = await C.me(); go(me?.slug); }
+        catch (x) { err.textContent = /invalid/i.test(x.message) ? "Wrong email or password." : x.message; err.hidden = false; f.querySelector(".ab-save").textContent = "Sign in"; }
+      };
+      return;
+    }
+    const ps = await C.profiles(), me = await C.me();
+    acct.innerHTML = `<div class="card glass add-card"><h2>${esc(me?.display_name || C.user.email)}</h2><p class="muted">${esc(C.user.email)}</p>
+      <h4>Libraries</h4><ul class="ab-res libs">${ps.map((p) => `<li data-lib="${esc(p.slug)}" class="${p.slug === ctx.slug ? "on" : ""}"><span><b>${esc(p.display_name)}'s Library</b><small>${p.id === me?.id ? "yours" : p.is_public ? "public" : "private"}</small></span></li>`).join("") || `<li class="muted">No libraries yet: run supabase/schema.sql and add profiles</li>`}</ul>
+      ${me ? `<button class="ed-del req">Update my picks now</button>` : ""}
+      <button class="ed-del out">Sign out</button><button class="ab-close" aria-label="Close">✕</button></div>`;
+    acct.querySelector(".libs").onclick = (e) => { const li = e.target.closest("[data-lib]"); if (li) go(li.dataset.lib); };
+    acct.querySelector(".out").onclick = async () => { await C.signOut(); go(null); };
+    const rq = acct.querySelector(".req");
+    if (rq) rq.onclick = async () => { try { await C.requestRefresh(); rq.textContent = "Requested: Claude picks it up on the next run"; } catch (x) { rq.textContent = /duplicate|unique|409/i.test(x.message) ? "Already requested" : "Couldn't request: " + x.message; } rq.disabled = true; };
+  }
+
+  window.LibraryEdits = { loadData, apply(d) { pristine = structuredClone(d); apply(d); mountDock(); mountAccount(); }, panelExtra, legendExtra, get editing() { return editing; } };
 })();

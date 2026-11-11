@@ -47,7 +47,7 @@ function shade(hex, f) { // f<0 darken, f>0 lighten
 }
 
 /* ---------- boot ---------- */
-fetch("data.json", { cache: "no-cache" }).then((r) => r.json()).then(init).catch((e) => {
+(window.LibraryEdits ? window.LibraryEdits.loadData() : fetch("data.json", { cache: "no-cache" }).then((r) => r.json())).then(init).catch((e) => {
   $("#loader p").textContent = "Couldn't load data.json — " + e.message;
 });
 
@@ -86,7 +86,7 @@ function init(d) {
 function build() {
   const gmap = new Map(data.genres.map((g) => [g.id, g]));
   const add = (n) => { n.a = 1; n.s = 1; n.born = 0; n.vis = false; n.x = (Math.random() - .5) * 60; n.y = (Math.random() - .5) * 60; nodes.push(n); byId.set(n.id, n); return n; };
-  add({ id: "root", kind: "root", name: "Baron's Library", color: "#ffd43b", rad: 34, gset: new Set() });
+  add({ id: "root", kind: "root", name: `${data.meta?.owner || "Baron"}'s Library`, color: "#ffd43b", rad: 34, gset: new Set() });
   for (const g of data.genres.filter((g) => !g.parent)) genreNodes.set(g.id, add({ id: "g:" + g.id, gid: g.id, kind: "macro", name: g.name, color: g.color, rad: 26, count: g.count, gset: new Set() }));
   for (const g of data.genres.filter((g) => g.parent)) genreNodes.set(g.id, add({ id: "g:" + g.id, gid: g.id, kind: "sub", name: g.name, color: g.color, parentG: g.parent, rad: 15, count: g.count, gset: new Set() }));
 
