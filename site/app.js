@@ -158,8 +158,15 @@ function applyLayout(alpha = 0.9, instant = false) {
   const m = nodes.filter((n) => n.kind === "macro" && ns.includes(n));
   const cl = mode === "clusters", tl = mode === "timeline";
   const L = ls.map((l) => ({ source: l.s, target: l.t, type: l.type, primary: l.primary }));
-  const dist = (l) => l.type === "tree" ? (l.source.kind === "root" ? (cl ? 175 : 300) : cl ? 125 : 170) : l.type === "genre" ? (l.primary ? (cl ? 95 : 70) : 150) : l.type === "series" ? 48 : 125;
-  const str = (l) => tl ? (l.type === "series" ? 0.04 : 0) : l.type === "tree" ? (cl ? 0.85 : 0.35) : l.type === "genre" ? (l.primary ? (cl ? 0.9 : 0.55) : cl ? 0.04 : 0.07) : l.type === "series" ? 0.5 : 0.07;
+  // Crowded sub-genres: a fixed short, stiff spring per book can't fit 40+ books around one hub, so springs and
+  // collisions fight and the cluster churns. Past CROWD books, springs get longer (room for a wider disc) and
+  // softer (collisions win calmly). Smaller clusters keep exactly their old settings.
+  const CROWD = 12, crowd = new Map();
+  for (const l of L) if (l.type === "genre" && l.primary) crowd.set(l.source, (crowd.get(l.source) || 0) + 1);
+  const busy = (l) => Math.max(1, (crowd.get(l.source) || 0) / CROWD), maxBusy = Math.max(1, ...[...crowd.values()].map((k) => k / CROWD));
+  const dist = (l) => l.type === "tree" ? (l.source.kind === "root" ? (cl ? 175 : 300) : cl ? 125 : 170) : l.type === "genre" ? (l.primary ? (cl ? 95 : 70) * Math.sqrt(busy(l)) : 150) : l.type === "series" ? 48 : 125;
+  const str = (l) => tl ? (l.type === "series" ? 0.04 : 0) : l.type === "tree" ? (cl ? 0.85 : 0.35) : l.type === "genre" ? (l.primary ? (cl ? 0.9 : 0.55) / busy(l) : cl ? 0.04 : 0.07) : l.type === "series" ? 0.5 : 0.07;
+  sim.velocityDecay(tl ? 0.38 : Math.min(0.55, 0.38 + 0.06 * (maxBusy - 1))); // a bit more friction when anything is crowded
   sim.nodes(ns).force("link", d3.forceLink(L).distance(dist).strength(str))
     .force("charge", d3.forceManyBody().strength((n) => tl ? -20 : n.kind === "root" ? -1100 : n.kind === "macro" ? -800 : n.kind === "sub" ? (cl ? -520 : -300) : cl ? -150 : -110).distanceMax(520))
     .force("collide", d3.forceCollide((n) => n.rad * (n.sc || 1) + (tl ? 4 : n.kind === "sub" ? 26 : n.kind === "macro" ? 22 : 8)).iterations(2).strength(0.9));
@@ -735,10 +742,18 @@ function rebuild() {
   nodes = []; links = []; byId = new Map(); adj = new Map(); genreNodes = new Map();
   recount(); build();
   nodes.forEach((n) => { const p = old.get(n.id); if (p) [n.x, n.y, n.vx, n.vy] = p; });
+  // new books / genres start next to where they belong instead of flying in from the centre
+  let fresh = 0;
+  nodes.forEach((n) => {
+    if (old.has(n.id) || n.kind === "root") return; fresh++;
+    const g = n.genreIds?.[0] ? genreNodes.get(n.genreIds[0]) : n.parentG ? genreNodes.get(n.parentG) : null;
+    const home = g && (old.get(g.id) || (g.parentG && old.get("g:" + g.parentG)));
+    if (home) { n.x = home[0] + (Math.random() - 0.5) * 40; n.y = home[1] + (Math.random() - 0.5) * 40; n.vx = n.vy = 0; }
+  });
   if (focusGenre && !genreNodes.has(focusGenre)) focusGenre = null;
   selected = selected ? byId.get(selected.id) || null : null; hover = null;
   $("#brand-sub").textContent = `${data.meta.read} read · ${data.meta.queued || 0} queued · ${data.meta.recommended} recommended`;
-  renderLegend(); renderPanel(); applyLayout(0.8);
+  renderLegend(); renderPanel(); applyLayout(fresh > 15 ? 0.8 : 0.4); // a small edit only needs a gentle nudge
 }
 window.Library = { get data() { return data; }, rebuild, select: (id) => select(byId.get(id) || null), node: (id) => byId.get(id), refreshPanel: () => renderPanel(), refreshLegend: () => renderLegend() };
 
