@@ -645,7 +645,8 @@ function detailHTML(n) {
   <div class="cover-wrap" style="--c:${n.color}">${n.cover ? `<img class="cover" src="${esc(n.cover)}" alt="Cover of ${esc(n.title)}">` : `<div class="cover noart" style="background:linear-gradient(150deg,${n.color},${shade(n.color, -0.65)})"><span>${esc(n.title)}</span></div>`}</div>
   <span class="kind ${isRec ? "rec" : n.kind === "queue" ? "queue" : "read"}" style="--c:${n.color}">${isRec ? "✦ Recommended" : n.kind === "queue" ? (n.shelf === "reading" ? "▶ Reading now" : "🔖 To read") : "Read"}</span>
   <h2>${esc(n.title)}</h2><p class="by">${esc(n.author)}</p>`;
-  if (!isRec && n.rating) h += stars5(n.rating);
+  const rate = window.LibraryEdits?.rateHTML?.(n);
+  if (rate) h += rate; else if (!isRec && n.rating) h += stars5(n.rating);
   const facts = [n.series && `${esc(n.series)}${n.seriesNo ? " #" + n.seriesNo : ""}`, n.year, n.pages && `${n.pages} pages`, n.dateRead && `read ${esc(n.dateRead)}`, !isRec && n.avg && `avg ${n.avg}`].filter(Boolean);
   if (facts.length) h += `<div class="facts">${facts.map((f) => `<span>${f}</span>`).join("")}</div>`;
   if (n.blurb) h += `<p class="blurb">${esc(n.blurb)}</p>`;
