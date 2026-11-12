@@ -41,6 +41,9 @@ def api(path, method="GET", body=None, prefer=None):
             return json.loads(raw) if raw else None
     except urllib.error.HTTPError as e:
         sys.exit(f"Supabase {method} {path.split('?')[0]} failed: HTTP {e.code} {e.read().decode()[:300]}")
+    except (urllib.error.URLError, OSError) as e:
+        sys.exit(f"Can't reach Supabase ({getattr(e, 'reason', e)}). If this is a cloud run, the environment's network "
+                 f"access must allow {URL.split('//')[1]} (Full access works). Stop here and report it.")
 
 
 def key(t):
