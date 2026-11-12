@@ -90,6 +90,11 @@
       try { const rows = await rest(`/edits?user_id=eq.${encodeURIComponent(userId)}&select=data,updated_at`); return rows?.[0]?.data || null; }
       catch (e) { console.warn("edits not loaded:", e.message); return null; }
     },
+    // Claude's picks for a library (written by the picks routine; see ROUTINE.md)
+    async loadPicks(userId) {
+      try { const rows = await rest(`/picks?user_id=eq.${encodeURIComponent(userId)}&select=data`); return rows?.[0]?.data || null; }
+      catch (e) { if (e.status !== 404) console.warn("picks not loaded:", e.message); return null; }
+    },
     async saveEdits(data) {
       if (!session) throw new Error("Not signed in");
       await rest("/edits?on_conflict=user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },

@@ -99,3 +99,15 @@ where not exists (select 1 from public.profiles p where p.id = u.id);
 -- have signed up, run (with your email):
 --   update public.profiles set slug = 'baron', display_name = 'Baron' where id = (select id from auth.users where email = 'YOUR_EMAIL');
 --   insert into public.approved_users (user_id) select id from auth.users where email in ('YOUR_EMAIL', 'SHAHAR_EMAIL');
+
+-- Claude's picks for each library (recommendations, genres for new books). Written only by the picks
+-- routine with the secret key; readable under the same rules as edits.
+create table if not exists public.picks (
+  user_id    uuid primary key references auth.users on delete cascade,
+  data       jsonb not null default '{}',
+  updated_at timestamptz not null default now()
+);
+alter table public.picks enable row level security;
+drop policy if exists "picks read" on public.picks;
+create policy "picks read" on public.picks for select
+  using (auth.uid() = user_id or exists (select 1 from public.profiles p where p.id = user_id and p.is_public));

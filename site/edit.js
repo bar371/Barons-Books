@@ -14,6 +14,7 @@
   const local = () => { try { return norm(JSON.parse(ls.get(KEY) || "{}")); } catch { return EMPTY(); } };
   let ctx = { slug: "baron", profile: null, isMine: false, ok: false };
   let ov = EMPTY();
+  let pk = null; // Claude's picks for this library: { newGenres, books: {id: {genres, blurb, fit}}, recs }
   if (new URLSearchParams(location.search).has("edit")) ls.set(EDIT, "1");
   const canEdit = () => ctx.isMine || (!ctx.ok && ls.get(EDIT) != null); // offline fallback: ?edit keeps local editing
   let editing = false;
@@ -40,7 +41,8 @@
     let d = base;
     if (ctx.slug !== "baron") d = await fetch(`libraries/${ctx.slug}.json`, { cache: "no-cache" }).then((r) => (r.ok ? r.json() : emptyBase(base))).catch(() => emptyBase(base));
     if (ctx.profile) {
-      const remote = await window.Cloud.loadEdits(ctx.profile.id);
+      const [remote, picks] = await Promise.all([window.Cloud.loadEdits(ctx.profile.id), window.Cloud.loadPicks(ctx.profile.id)]);
+      pk = picks;
       ov = norm(remote);
       const old = local(); // first sign-in: move edits made on this device into the cloud
       if (ctx.isMine && !remote && (old.books.length || old.genres.length || Object.keys(old.assign).length)) { ov = old; Store.save(ov).then(() => ls.set(KEY, "{}")); }
@@ -51,9 +53,10 @@
 
   // ---------- merge the overlay into data.json ----------
   function apply(d) {
+    d.recs = d.recs || []; d.queue = d.queue || [];
     const ids = new Set(d.genres.map((g) => g.id));
     let pi = d.genres.filter((g) => !g.parent).length;
-    for (const g of ov.genres) {
+    for (const g of [...(pk?.newGenres || []), ...ov.genres]) {
       if (ids.has(g.id)) continue;
       const parent = g.parent && d.genres.find((x) => x.id === g.parent);
       if (g.parent && !parent) continue;
@@ -67,9 +70,55 @@
       if (b.shelf === "read") d.books.push({ ...item, shelf: "read" });
       else (d.queue = d.queue || []).push({ ...item, shelf: b.shelf === "reading" ? "reading" : "to-read" });
     }
+    // Claude's notes on books (genres for ones you added, blurbs, taste fit for the to-read list)
+    const pb = pk?.books || {};
+    for (const it of [...d.books, ...(d.queue || [])]) {
+      const p = pb[it.id]; if (!p) continue;
+      if (!(it.genres || []).length && p.genres) it.genres = p.genres.filter((g) => ids.has(g));
+      if (!it.blurb && p.blurb) it.blurb = p.blurb;
+      if (p.fit != null) it.fit = p.fit;
+      it.pending = false;
+    }
+    // Claude's recommendations; anything you've since added to your shelves drops off the list
+    const tkey = (t) => String(t || "").toLowerCase().split(" (")[0].trim();
+    const owned = new Set([...d.books, ...(d.queue || [])].map((b) => tkey(b.title)));
+    if (pk || ov.books.length) d.recs = (d.recs || []).filter((r) => !owned.has(tkey(r.title)));
+    const readIds = new Set(d.books.map((b) => b.id)), have = new Set(d.recs.map((r) => tkey(r.title)));
+    for (const r of pk?.recs || []) {
+      const k = tkey(r.title), because = (r.because || []).filter((x) => readIds.has(x)), genres = (r.genres || []).filter((g) => ids.has(g));
+      if (owned.has(k) || have.has(k) || !because.length || !genres.length) continue;
+      have.add(k); d.recs.push({ ...r, because, genres, picked: true });
+    }
     const all = [...d.books, ...d.recs, ...(d.queue || [])];
     for (const [id, gs] of Object.entries(ov.assign)) { const it = all.find((x) => x.id === id); if (it) it.genres = gs.filter((g) => ids.has(g)); }
     for (const [id, r] of Object.entries(ov.ratings || {})) { const it = d.books.find((x) => x.id === id); if (it) it.rating = r || null; }
+    score(d);
+  }
+
+  // Same formulas as scripts/build_graph.py (incl. Python's round-half-to-even), recomputed here so new
+  // picks and rating changes re-rank straight away.
+  const pr = (x) => { const f = Math.floor(x), e = x - f; return e > 0.5 ? f + 1 : e < 0.5 ? f : f % 2 === 0 ? f : f + 1; };
+  const avg = (a) => a.reduce((s, x) => s + x, 0) / a.length;
+  const order = (a, b) => b.score - a.score || b.parts.taste - a.parts.taste || (a.title < b.title ? -1 : a.title > b.title ? 1 : 0);
+  function score(d) {
+    const books = d.books;
+    for (const r of d.recs) {
+      const taste = r.fit ?? r.parts?.taste ?? 70, bc = new Set(r.because || []);
+      const stars = books.filter((b) => bc.has(b.id) && b.rating).map((b) => b.rating);
+      const ratings = stars.length ? pr(avg(stars) / 5 * 100) : 70, links = pr(Math.min(bc.size, 3) / 3 * 100);
+      r.score = pr(0.6 * taste + 0.3 * ratings + 0.1 * links);
+      r.parts = { taste, ratings, links, avgStars: stars.length ? pr(avg(stars) * 10) / 10 : null };
+    }
+    d.recs.sort(order).forEach((r, i) => (r.rank = i + 1));
+    const series = new Set(books.map((b) => b.series).filter(Boolean)), q = d.queue || [];
+    for (const it of q) {
+      if (it.shelf !== "to-read") { delete it.score; delete it.parts; delete it.rank; continue; }
+      const taste = it.fit ?? it.parts?.taste ?? 70, stars = books.filter((b) => b.author === it.author && b.rating).map((b) => b.rating);
+      const author = stars.length ? pr(avg(stars) / 5 * 100) : 70, ser = it.series && series.has(it.series) ? 100 : 50;
+      it.score = pr(0.6 * taste + 0.25 * author + 0.15 * ser);
+      it.parts = { taste, author, series: ser, avgStars: stars.length ? pr(avg(stars) * 10) / 10 : null, nAuthor: stars.length };
+    }
+    q.filter((it) => it.score != null).sort(order).forEach((it, i) => (it.rank = i + 1));
   }
   function commit(reselect) { if (!canEdit()) return; Store.save(ov); reload(); if (reselect) window.Library.select(reselect); }
   // rebuilding from a fresh copy of data.json keeps removals/renames clean
@@ -103,13 +152,13 @@
 
   // ---------- panel: re-tag a book ----------
   function panelExtra(n) {
-    if (!editing) return n.mine ? `<p class="ed-note">Added on this device · waiting for Claude's genres & picks</p>` : "";
+    if (!editing) return n.mine && n.pending ? `<p class="ed-note">Added by you · Claude adds genres & picks on the next update</p>` : n.picked ? `<p class="ed-note">✦ A fresh pick from Claude</p>` : "";
     const cur = n.genreIds || [];
     return `<div class="ed-box" data-ed-book="${esc(n.id)}"><h4>Edit genres</h4>
       <div class="chips">${cur.map((g) => `<span class="chip ed-chip">${esc(D().genres.find((x) => x.id === g)?.name || g)}<button data-ed-rm="${esc(g)}" aria-label="Remove">×</button></span>`).join("") || `<span class="muted">No genre yet</span>`}</div>
       ${genreSelect("ed-pick")}${newGenreForm()}
       ${n.mine ? `<button class="ed-del">Remove this book</button>` : ""}
-      <p class="ed-note">${n.mine ? "Added by you · Claude adds genres & picks on the next update" : "Changes recluster the map straight away"}</p></div>`;
+      <p class="ed-note">${n.mine && n.pending ? "Added by you · Claude adds genres & picks on the next update" : "Changes recluster the map straight away"}</p></div>`;
   }
   // in ✎ mode the stars under a read book's title become clickable
   function rateHTML(n) {
