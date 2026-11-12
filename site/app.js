@@ -74,7 +74,8 @@ function init(d) {
   sim.tick(160);
   fitView(vNodes, false);
   const hashed = decodeURIComponent(location.hash.slice(1));
-  if (hashed && byId.has(hashed)) select(byId.get(hashed), true);
+  if (hashed && byId.has(hashed)) select(byId.get(hashed), true); // a shared link (#bookId) opens that book once…
+  if (location.hash) history.replaceState(null, "", location.pathname + location.search); // …then the address is clean again
   const ready = Promise.race([atlasP, new Promise((r) => setTimeout(r, 1200))]);
   ready.then(() => { $("#loader").classList.add("done"); const t0 = performance.now();
     const order = [...vNodes].sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y));
@@ -566,8 +567,7 @@ function hideTip() { tip.hidden = true; }
 
 /* ---------- selection, focus, panel ---------- */
 function select(n, instant) {
-  selected = n;
-  history.replaceState(null, "", n ? "#" + encodeURIComponent(n.id) : location.pathname + location.search);
+  selected = n; // (not written to the URL: a bookmarked or restored tab would reopen that book every time)
   renderPanel();
   if (n && n.x != null) flyTo(n, Math.max(T.k, 1.4)), instant && 0;
 }
@@ -669,12 +669,18 @@ function detailHTML(n) {
     if (sib.length) h += `<h4>${n.series ? "In this series / by this author" : "More by this author"}</h4><div class="minis">${sib.map((b) => miniBtn(b, b.series ? b.series + (b.seriesNo ? " #" + b.seriesNo : "") : b.author)).join("")}</div>`;
   }
   h += window.LibraryEdits?.panelExtra?.(n) || "";
-  return h + `<a class="cta" href="${url}" target="_blank" rel="noopener">${isRec ? "Find on" : "Open in"} Goodreads ↗</a>`;
+  return h + `<a class="cta" href="${url}" target="_blank" rel="noopener">${isRec ? "Find on" : "Open in"} Goodreads ↗</a><button class="copylink" data-copy>🔗 Copy link to this book</button>`;
 }
 
 document.addEventListener("click", (e) => {
   const go = e.target.closest("[data-go]"), ge = e.target.closest("[data-genre]"), au = e.target.closest("[data-author]");
   if (e.target.closest("[data-close]")) select(null);
+  const cp = e.target.closest("[data-copy]");
+  if (cp && selected) {
+    const link = location.origin + location.pathname + location.search + "#" + encodeURIComponent(selected.id);
+    const done = (ok) => { if (!ok) return prompt("Copy this link:", link); cp.textContent = "✓ Link copied"; setTimeout(() => (cp.textContent = "🔗 Copy link to this book"), 2200); };
+    navigator.clipboard?.writeText(link).then(() => done(true), () => done(false)) ?? done(false);
+  }
   else if (go) { const n = byId.get(go.dataset.go); if (n) { if (n.kind === "rec" && !showRecs) setRecs(true); select(n); } }
   else if (ge) setFocus(ge.dataset.genre);
   else if (au) { q.value = au.dataset.author; runSearch(); fitView(nodes.filter((n) => searchSet?.has(n.id) && vNodes.includes(n))); }
