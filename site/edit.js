@@ -141,7 +141,10 @@
   document.body.appendChild(modal);
   const abq = modal.querySelector("#ab-q"), abres = modal.querySelector("#ab-res"), abform = modal.querySelector("#ab-form");
   let timer = 0, results = [], pick = null, ctl = null;
-  function openAdd() { modal.hidden = false; abform.hidden = true; abres.innerHTML = ""; abq.value = ""; setTimeout(() => abq.focus(), 30); }
+  function openAdd(prefill) {
+    modal.hidden = false; abform.hidden = true; abres.innerHTML = ""; abq.value = typeof prefill === "string" ? prefill : "";
+    setTimeout(() => abq.focus(), 30); if (abq.value) search();
+  }
   function closeAdd() { modal.hidden = true; }
   modal.addEventListener("click", (e) => { if (e.target === modal || e.target.closest(".ab-close")) closeAdd(); });
   addEventListener("keydown", (e) => { if (e.key === "Escape" && !modal.hidden) { e.stopPropagation(); closeAdd(); } }, true);
@@ -256,5 +259,5 @@
     if (rq) rq.onclick = async () => { try { await C.requestRefresh(); rq.textContent = "Requested: Claude picks it up on the next run"; } catch (x) { rq.textContent = /duplicate|unique|409/i.test(x.message) ? "Already requested" : /row-level|policy|403/i.test(x.message) ? "Picks from Claude are invite-only for now: ask Baron" : "Couldn't request: " + x.message; } rq.disabled = true; };
   }
 
-  window.LibraryEdits = { loadData, apply(d) { pristine = structuredClone(d); apply(d); mountDock(); mountAccount(); }, panelExtra, legendExtra, get editing() { return editing; } };
+  window.LibraryEdits = { loadData, apply(d) { pristine = structuredClone(d); apply(d); mountDock(); mountAccount(); }, panelExtra, legendExtra, get editing() { return editing; }, get canAdd() { return canEdit(); }, openAdd };
 })();

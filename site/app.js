@@ -698,12 +698,17 @@ function runSearch() {
   searchSet = new Set(items.map((n) => n.id));
   const gen = [...genreNodes.values()].filter((g) => g.name.toLowerCase().includes(s)).slice(0, 3);
   resList = [...items.slice(0, 7), ...gen]; resSel = 0;
-  resEl.innerHTML = resList.length ? resList.map((n, i) => `<li data-i="${i}" class="${i === 0 ? "sel" : ""}" tabindex="-1">${n.cover ? `<img src="${esc(n.cover)}" alt="">` : `<span class="ph"></span>`}<span><b>${esc(n.name)}</b><small>${n.author ? esc(n.author) : (n.count + " books")}</small></span><span class="tag">${n.kind === "rec" ? "✦ " + n.score + "%" : n.kind === "queue" ? (n.shelf === "reading" ? "▶ reading" : "to read") : n.kind === "book" ? "read" : "genre"}</span></li>`).join("") : `<li class="muted">No matches</li>`;
+  // owners can add whatever they typed straight from here (Open Library search in the add-book dialog)
+  if (window.LibraryEdits?.canAdd && s.length >= 3) resList.push({ kind: "add", query: q.value.trim() });
+  resEl.innerHTML = resList.length ? resList.map((n, i) => n.kind === "add"
+    ? `<li data-i="${i}" class="add-row${i === 0 ? " sel" : ""}" tabindex="-1"><span class="ph plus">＋</span><span><b>Add “${esc(n.query)}”</b><small>Find it on Open Library and add it to your map</small></span><span class="tag">new</span></li>`
+    : `<li data-i="${i}" class="${i === 0 ? "sel" : ""}" tabindex="-1">${n.cover ? `<img src="${esc(n.cover)}" alt="">` : `<span class="ph"></span>`}<span><b>${esc(n.name)}</b><small>${n.author ? esc(n.author) : (n.count + " books")}</small></span><span class="tag">${n.kind === "rec" ? "✦ " + n.score + "%" : n.kind === "queue" ? (n.shelf === "reading" ? "▶ reading" : "to read") : n.kind === "book" ? "read" : "genre"}</span></li>`).join("") : `<li class="muted">No matches</li>`;
   resEl.hidden = false;
 }
 function chooseResult(i) {
   const n = resList[i]; if (!n) return;
   q.value = ""; resEl.hidden = true; searchSet = null; q.blur();
+  if (n.kind === "add") return window.LibraryEdits?.openAdd(n.query);
   if (n.kind === "macro" || n.kind === "sub") setFocus(n.gid); else select(n);
 }
 q.addEventListener("input", runSearch);
