@@ -73,9 +73,11 @@ function init(d) {
   applyLayout(1, true);
   sim.tick(160);
   fitView(vNodes, false);
-  const hashed = decodeURIComponent(location.hash.slice(1));
-  if (hashed && byId.has(hashed)) select(byId.get(hashed), true); // a shared link (#bookId) opens that book once…
-  if (location.hash) history.replaceState(null, "", location.pathname + location.search); // …then the address is clean again
+  // A shared link (?book=id) opens that book once, then the address is cleaned. Old-style "#id" addresses (which got
+  // saved into bookmarks / home-screen icons and reopened the same book every time) are ignored and cleaned too.
+  const qs = new URLSearchParams(location.search), shared = qs.get("book");
+  if (shared && byId.has(shared)) select(byId.get(shared), true);
+  if (shared != null || location.hash) { qs.delete("book"); const s = qs.toString(); history.replaceState(null, "", location.pathname + (s ? "?" + s : "")); }
   const ready = Promise.race([atlasP, new Promise((r) => setTimeout(r, 1200))]);
   ready.then(() => { $("#loader").classList.add("done"); const t0 = performance.now();
     const order = [...vNodes].sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y));
@@ -677,9 +679,12 @@ document.addEventListener("click", (e) => {
   if (e.target.closest("[data-close]")) select(null);
   const cp = e.target.closest("[data-copy]");
   if (cp && selected) {
-    const link = location.origin + location.pathname + location.search + "#" + encodeURIComponent(selected.id);
+    const q = new URLSearchParams(location.search); q.set("book", selected.id);
+    const link = location.origin + location.pathname + "?" + q.toString();
     const done = (ok) => { if (!ok) return prompt("Copy this link:", link); cp.textContent = "✓ Link copied"; setTimeout(() => (cp.textContent = "🔗 Copy link to this book"), 2200); };
-    navigator.clipboard?.writeText(link).then(() => done(true), () => done(false)) ?? done(false);
+    const write = navigator.clipboard?.writeText(link);
+    if (!write) done(false); // some browsers never answer: fall back to the box after a moment
+    else Promise.race([write.then(() => true, () => false), new Promise((r) => setTimeout(() => r(false), 1500))]).then(done);
   }
   else if (go) { const n = byId.get(go.dataset.go); if (n) { if (n.kind === "rec" && !showRecs) setRecs(true); select(n); } }
   else if (ge) setFocus(ge.dataset.genre);
