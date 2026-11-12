@@ -167,7 +167,7 @@ function applyLayout(alpha = 0.9, instant = false) {
   const busy = (l) => Math.max(1, (crowd.get(l.source) || 0) / CROWD), maxBusy = Math.max(1, ...[...crowd.values()].map((k) => k / CROWD));
   const dist = (l) => l.type === "tree" ? (l.source.kind === "root" ? (cl ? 175 : 300) : cl ? 125 : 170) : l.type === "genre" ? (l.primary ? (cl ? 95 : 70) * Math.sqrt(busy(l)) : 150) : l.type === "series" ? 48 : 125;
   const str = (l) => tl ? (l.type === "series" ? 0.04 : 0) : l.type === "tree" ? (cl ? 0.85 : 0.35) : l.type === "genre" ? (l.primary ? (cl ? 0.9 : 0.55) / busy(l) : cl ? 0.04 : 0.07) : l.type === "series" ? 0.5 : 0.07;
-  sim.velocityDecay(tl ? 0.38 : Math.min(0.55, 0.38 + 0.06 * (maxBusy - 1))); // a bit more friction when anything is crowded
+  sim.velocityDecay(tl ? 0.38 : Math.min(0.45, 0.38 + 0.02 * (maxBusy - 1))); // a touch more friction when anything is crowded
   sim.nodes(ns).force("link", d3.forceLink(L).distance(dist).strength(str))
     .force("charge", d3.forceManyBody().strength((n) => tl ? -20 : n.kind === "root" ? -1100 : n.kind === "macro" ? -800 : n.kind === "sub" ? (cl ? -520 : -300) : cl ? -150 : -110).distanceMax(520))
     .force("collide", d3.forceCollide((n) => n.rad * (n.sc || 1) + (tl ? 4 : n.kind === "sub" ? 26 : n.kind === "macro" ? 22 : 8)).iterations(2).strength(0.9));
@@ -759,7 +759,7 @@ function rebuild() {
   if (focusGenre && !genreNodes.has(focusGenre)) focusGenre = null;
   selected = selected ? byId.get(selected.id) || null : null; hover = null;
   $("#brand-sub").textContent = `${data.meta.read} read · ${data.meta.queued || 0} queued · ${data.meta.recommended} recommended`;
-  renderLegend(); renderPanel(); applyLayout(fresh > 15 ? 0.8 : 0.4); // a small edit only needs a gentle nudge
+  renderLegend(); renderPanel(); applyLayout(fresh > 15 ? 0.8 : 0.55); // a small edit only needs a gentler nudge
 }
 window.Library = { get data() { return data; }, rebuild, select: (id) => select(byId.get(id) || null), node: (id) => byId.get(id), refreshPanel: () => renderPanel(), refreshLegend: () => renderLegend() };
 
