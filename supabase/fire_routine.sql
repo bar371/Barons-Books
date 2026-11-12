@@ -19,7 +19,9 @@ begin
   end if;
   select decrypted_secret into url from vault.decrypted_secrets where name = 'routine_url';
   select decrypted_secret into tok from vault.decrypted_secrets where name = 'routine_token';
-  if url is null or tok is null then return new; end if;
+  -- pasted values often carry a stray space or line break, which makes the HTTP call fail
+  url := btrim(url, E' \t\r\n"'''); tok := btrim(regexp_replace(tok, '^Bearer\s+', '', 'i'), E' \t\r\n"''');
+  if url is null or tok is null or url = '' or tok = '' then return new; end if;
   perform net.http_post(
     url := url,
     body := jsonb_build_object('text', 'Update requested from the app'),
