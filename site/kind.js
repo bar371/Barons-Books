@@ -109,7 +109,7 @@
     tipQueue: (rank, N, score) => rank ? `🎁 Wishlist #${rank} of ${N} · ${score}%` : "🎁 On my wishlist",
     kindLabel: { rec: "✦ Recommended", reading: "▶ On the table", queue: "🎁 Wishlist", read: "Owned" },
     coverAlt: "Box of",
-    facts: (n, isRec, esc) => [n.series && n.series !== n.title && esc(n.series), players(n), n.playtime && `${n.playtime} min`, n.year, n.weight && `weight ${n.weight}/5`, n.plays && `played ×${n.plays}`],
+    facts: (n, isRec, esc) => [n.expansion && "expansion", n.series && n.series !== n.title && esc(n.series), players(n), n.playtime && `${n.playtime} min`, n.year, n.weight && `weight ${n.weight}/5`, n.plays && `played ×${n.plays}`],
     because: "Because I love",
     siblings: (hasSeries) => hasSeries ? "Same family / same designer" : "More by this designer",
     link: (n) => n.bggId ? `https://boardgamegeek.com/boardgame/${n.bggId}` : `https://boardgamegeek.com/geeksearch.php?action=search&objecttype=boardgame&q=${encodeURIComponent(n.title)}`,
@@ -181,6 +181,41 @@
       out.push({ key: "typed:" + gslug(s), title: s, creator: "", small: "Add it as typed: Claude fills in the details", thumb: null, big: null,
         make: () => ({ id: "g-" + gslug(s), title: s, author: "", year: null, players: null, playtime: null, bggId: null, series: null, cover: null }) });
       return out;
+    },
+    // BoardGameGeek collection export (Collection page -> Export, CSV). Read in the browser; nothing is uploaded.
+    importLabel: "Have a BoardGameGeek collection? Import its CSV export",
+    async importCSV(text) {
+      const rows = d3.csvParse(text.replace(/^\uFEFF/, ""));
+      if (!rows.columns.includes("objectid") || !rows.columns.includes("objectname")) throw new Error("That file doesn't look like a BoardGameGeek collection export");
+      const int = (v) => { const x = parseInt(v, 10); return x > 0 ? x : null; };
+      const stars = (v) => { const x = parseFloat(v); return x > 0 ? Math.min(5, Math.max(1, Math.ceil(x / 2))) : null; }; // BGG 1-10 -> 1-5 (9-10 = 5)
+      const want = (r) => ["wishlist", "wanttobuy", "want", "preordered", "wanttoplay"].some((k) => r[k] === "1");
+      const bases = rows.filter((r) => r.itemtype !== "expansion").map((r) => r.objectname);
+      const items = [];
+      for (const r of rows) {
+        const shelf = r.own === "1" ? "read" : want(r) ? "to-read" : null;
+        if (!shelf) continue; // previously owned, for trade only, ...
+        const exp = r.itemtype === "expansion", lo = int(r.minplayers), w = parseFloat(r.avgweight);
+        const base = exp ? bases.filter((b) => r.objectname.startsWith(b)).sort((a, b) => b.length - a.length)[0] || null : null;
+        items.push({ id: "bgg-" + r.objectid, bggId: r.objectid, title: r.objectname, author: "", year: int(r.yearpublished),
+          players: lo ? [lo, int(r.maxplayers) || lo] : null, playtime: int(r.playingtime) || int(r.maxplaytime), weight: w > 0 ? Math.round(w * 10) / 10 : null,
+          plays: int(r.numplays), note: (r.comment || "").trim() || null, rating: shelf === "read" ? stars(r.rating) : null, shelf,
+          ...(exp ? { expansion: true } : {}), series: base, dateRead: r.acquisitiondate || null, cover: null });
+      }
+      for (const it of items) if (!it.expansion && items.some((x) => x.series === it.title)) it.series = it.title; // ties expansions to their base game
+      // designers + a photo from Wikidata, matched by BGG id (one query; best effort)
+      try {
+        const vals = items.map((i) => `"${i.bggId.replace(/\D/g, "")}"`).join(" ");
+        const q = `SELECT ?bgg ?img (GROUP_CONCAT(DISTINCT ?dl; separator=" & ") AS ?designers) WHERE { VALUES ?bgg { ${vals} } ?item wdt:P2339 ?bgg .
+          OPTIONAL { ?item wdt:P18 ?img } OPTIONAL { ?item wdt:P287|wdt:P50|wdt:P170 ?d . ?d rdfs:label ?dl FILTER(lang(?dl)="en") } } GROUP BY ?bgg ?img`;
+        const r = await fetch("https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(q)).then((x) => x.json());
+        for (const b of r.results.bindings) {
+          const it = items.find((i) => i.bggId === b.bgg.value); if (!it) continue;
+          if (b.designers?.value && !it.author) it.author = b.designers.value;
+          if (b.img?.value && !it.cover) it.cover = b.img.value.replace(/^http:/, "https:") + "?width=600";
+        }
+      } catch {}
+      return items;
     },
     // page text outside the scripts (index.html is written for books)
     dom: [

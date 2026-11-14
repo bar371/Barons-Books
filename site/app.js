@@ -100,7 +100,7 @@ function build() {
   const item = (b, kind) => {
     const gs = b.genres || [], primary = gs[0], macro = primary ? gmap.get(primary)?.parent : null;
     return add({ ...b, kind, name: b.title, genreIds: gs, macroId: macro, color: macro ? gmap.get(macro).color : UNCAT,
-      rad: kind === "rec" ? 25 : 27, tt: kind === "rec" ? (b.score - sMin) / ((sMax - sMin) || 1) : kind === "queue" ? qt(b) : 0, sc: kind === "rec" ? 0.86 + 0.26 * ((b.score - sMin) / ((sMax - sMin) || 1)) : kind === "queue" ? 0.9 + 0.1 * qt(b) : 0.88 + 0.07 * (b.rating || 3),
+      rad: kind === "rec" ? 25 : 27, tt: kind === "rec" ? (b.score - sMin) / ((sMax - sMin) || 1) : kind === "queue" ? qt(b) : 0, sc: (b.expansion ? 0.78 : 1) * (kind === "rec" ? 0.86 + 0.26 * ((b.score - sMin) / ((sMax - sMin) || 1)) : kind === "queue" ? 0.9 + 0.1 * qt(b) : 0.88 + 0.07 * (b.rating || 3)),
       gset: new Set([...gs, ...gs.map((g) => gmap.get(g)?.parent).filter(Boolean)]), yr: yearOf(b) });
   };
   data.books.forEach((b) => item(b, "book"));
@@ -660,6 +660,7 @@ function detailHTML(n) {
   const facts = K.facts(n, isRec, esc).filter(Boolean);
   if (facts.length) h += `<div class="facts">${facts.map((f) => `<span>${f}</span>`).join("")}</div>`;
   if (n.blurb) h += `<p class="blurb">${esc(n.blurb)}</p>`;
+  if (n.note) h += `<p class="blurb mynote">“${esc(n.note)}”</p>`; // your own comment (e.g. from a BoardGameGeek import)
   if (isRec && n.reason) h += `<div class="why" style="--c:${n.color}">${esc(n.reason)}</div>`;
   if (isRec) h += matchHTML(n);
   else if (n.kind === "queue" && n.rank) h += readNextHTML(n);

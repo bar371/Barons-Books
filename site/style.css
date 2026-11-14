@@ -212,3 +212,6 @@ kbd{font:500 11px var(--ui);padding:1px 6px;border:1px solid var(--line);border-
 [data-kind="games"] #results img,[data-kind="games"] #results .ph{height:28px} [data-kind="games"] .mini img,[data-kind="games"] .mini .ph{height:34px}
 [data-kind="games"] .ab-res img,[data-kind="games"] .ab-res .ph{height:30px} [data-kind="games"] .ab-many img,[data-kind="games"] .ab-many .ph{height:64px}
 [data-kind="games"] .cover{width:190px;aspect-ratio:1;border-radius:8px;transform:rotateY(-10deg)}
+
+.ab-import{margin:6px 0 2px;font-size:13px} .ab-import label{cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.blurb.mynote{font-style:italic}
