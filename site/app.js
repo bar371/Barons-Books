@@ -653,7 +653,7 @@ function detailHTML(n) {
   const url = K.link(n, isRec);
   let h = `<button class="close" data-close aria-label="Close">✕</button>
   <div class="cover-wrap" style="--c:${n.color}">${n.cover ? `<img class="cover" src="${esc(n.cover)}" alt="${K.coverAlt} ${esc(n.title)}">` : `<div class="cover noart" style="background:linear-gradient(150deg,${n.color},${shade(n.color, -0.65)})"><span>${esc(n.title)}</span></div>`}</div>
-  <span class="kind ${isRec ? "rec" : n.kind === "queue" ? "queue" : "read"}" style="--c:${n.color}">${isRec ? K.kindLabel.rec : n.kind === "queue" ? (n.shelf === "reading" ? K.kindLabel.reading : K.kindLabel.queue) : K.kindLabel.read}</span>
+  <span class="kind ${isRec ? "rec" : n.kind === "queue" ? "queue" : "read"}" style="--c:${n.color}">${isRec ? K.kindLabel.rec : n.kind === "queue" ? (n.shelf === "reading" ? K.kindLabel.reading : K.kindLabel.queue) : typeof K.kindLabel.read === "function" ? K.kindLabel.read(n) : K.kindLabel.read}</span>
   <h2>${esc(n.title)}</h2><p class="by">${esc(n.author)}</p>`;
   const rate = window.LibraryEdits?.rateHTML?.(n);
   if (rate) h += rate; else if (!isRec && n.rating) h += stars5(n.rating);
@@ -723,7 +723,7 @@ function runSearch() {
   if (window.LibraryEdits?.canAdd && s.length >= 3) resList.push({ kind: "add", query: q.value.trim() });
   resEl.innerHTML = resList.length ? resList.map((n, i) => n.kind === "add"
     ? `<li data-i="${i}" class="add-row${i === 0 ? " sel" : ""}" tabindex="-1"><span class="ph plus">＋</span><span><b>Add “${esc(n.query)}”</b><small>${K.addRowNote}</small></span><span class="tag">new</span></li>`
-    : `<li data-i="${i}" class="${i === 0 ? "sel" : ""}" tabindex="-1">${n.cover ? `<img src="${esc(n.cover)}" alt="">` : `<span class="ph"></span>`}<span><b>${esc(n.name)}</b><small>${n.author ? esc(n.author) : n.count + " " + K.items}</small></span><span class="tag">${n.kind === "rec" ? "✦ " + n.score + "%" : n.kind === "queue" ? (n.shelf === "reading" ? K.tag.reading : K.tag.queue) : n.kind === "book" ? K.tag.read : "genre"}</span></li>`).join("") : `<li class="muted">No matches</li>`;
+    : `<li data-i="${i}" class="${i === 0 ? "sel" : ""}" tabindex="-1">${n.cover ? `<img src="${esc(n.cover)}" alt="">` : `<span class="ph"></span>`}<span><b>${esc(n.name)}</b><small>${n.author ? esc(n.author) : n.count + " " + K.items}</small></span><span class="tag">${n.kind === "rec" ? "✦ " + n.score + "%" : n.kind === "queue" ? (n.shelf === "reading" ? K.tag.reading : K.tag.queue) : n.kind === "book" ? (typeof K.tag.read === "function" ? K.tag.read(n) : K.tag.read) : "genre"}</span></li>`).join("") : `<li class="muted">No matches</li>`;
   resEl.hidden = false;
 }
 function chooseResult(i) {

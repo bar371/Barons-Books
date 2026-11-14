@@ -295,10 +295,10 @@
     catch (x) { abform.innerHTML = `<p class="err">${esc(x.message)}</p>`; return; }
     const have = (it) => ov.books.find((b) => (b.bggId && b.bggId === it.bggId) || tkey(b.title) === tkey(it.title));
     const owned = imported.filter((i) => i.shelf === "read"), wish = imported.filter((i) => i.shelf !== "read"), exps = imported.filter((i) => i.expansion), upd = imported.filter(have);
-    abform.innerHTML = imported.length ? `<p><b>${imported.length}</b> games found: ${owned.length} owned${exps.length ? ` (${exps.length} of them expansions)` : ""}, ${wish.length} on the wishlist.${upd.length ? ` ${upd.length} already on your map get updated, not doubled.` : ""}</p>
+    abform.innerHTML = imported.length ? `<p><b>${imported.length}</b> games found: ${owned.filter((i) => i.owned !== false).length} owned${owned.some((i) => i.owned === false) ? `, ${owned.filter((i) => i.owned === false).length} played but not owned` : ""}${exps.length ? ` (${exps.length} of them expansions)` : ""}, ${wish.length} on the wishlist.${upd.length ? ` ${upd.length} already on your map get updated, not doubled.` : ""}</p>
       <div class="ab-many">${imported.slice(0, 60).map((p) => `<div title="${esc(p.title)}">${p.cover ? `<img src="${esc(p.cover)}" alt="">` : `<span class="ph"></span>`}<small>${esc(p.title)}</small></div>`).join("")}</div>
       <p class="ed-note">Ratings convert from BGG's 10 points to 5 stars. Claude adds categories, missing designers and picks on the next update.</p>
-      <button class="ab-save ab-import-go">Import ${imported.length} games</button>` : `<p class="muted">No owned or wishlisted games in that file.</p>`;
+      <button class="ab-save ab-import-go">Import ${imported.length} games</button>` : `<p class="muted">No owned, played or wishlisted games in that file.</p>`;
   });
   abform.addEventListener("click", (e) => {
     if (!e.target.closest(".ab-import-go")) return;
@@ -306,7 +306,7 @@
     for (const it of imported) {
       const ex = ov.books.find((b) => (b.bggId && b.bggId === it.bggId) || tkey(b.title) === tkey(it.title));
       if (ex) { // update what BGG knows better (shelf, your rating, plays, note); fill the rest only where empty
-        Object.assign(ex, { shelf: it.shelf, bggId: it.bggId, plays: it.plays, note: it.note ?? ex.note });
+        Object.assign(ex, { shelf: it.shelf, bggId: it.bggId, plays: it.plays, note: it.note ?? ex.note }); if (it.owned === false) ex.owned = false; else delete ex.owned;
         if (it.rating) { ex.rating = it.rating; if (ov.ratings) delete ov.ratings[ex.id]; }
         for (const k of ["author", "year", "players", "playtime", "weight", "series", "cover", "expansion"]) if (ex[k] == null || ex[k] === "") ex[k] = it[k];
       } else ov.books.push({ ...it, genres: [], added: now, pending: true });

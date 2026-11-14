@@ -157,15 +157,15 @@
     tables: { edits: "game_edits", picks: "game_picks" },
     png: "barons-games.png",
     box: [40, 40], // square game boxes
-    sub: (m) => `${m.read} owned · ${m.queued || 0} on the wishlist · ${m.recommended} recommended`,
+    sub: (m) => `${m.read} owned or played · ${m.queued || 0} on the wishlist · ${m.recommended} recommended`,
     items: "games",
     count: (n) => many(n, "game", "games"),
     Genres: "Categories",
     tipReading: "▶ On the table right now",
     tipQueue: (rank, N, score) => rank ? `🎁 Wishlist #${rank} of ${N} · ${score}%` : "🎁 On my wishlist",
-    kindLabel: { rec: "✦ Recommended", reading: "▶ On the table", queue: "🎁 Wishlist", read: "Owned" },
+    kindLabel: { rec: "✦ Recommended", reading: "▶ On the table", queue: "🎁 Wishlist", read: (n) => n.owned === false ? "Played" : "Owned" },
     coverAlt: "Box of",
-    facts: (n, isRec, esc) => [n.expansion && "expansion", n.series && n.series !== n.title && esc(n.series), players(n), n.playtime && `${n.playtime} min`, n.year, n.weight && `weight ${n.weight}/5`, n.plays && `played ×${n.plays}`],
+    facts: (n, isRec, esc) => [n.owned === false && "played, not owned", n.expansion && "expansion", n.series && n.series !== n.title && esc(n.series), players(n), n.playtime && `${n.playtime} min`, n.year, n.weight && `weight ${n.weight}/5`, n.plays && `played ×${n.plays}`],
     because: "Because I love",
     siblings: (hasSeries) => hasSeries ? "Same family / same designer" : "More by this designer",
     link: (n) => n.bggId ? `https://boardgamegeek.com/boardgame/${n.bggId}` : `https://boardgamegeek.com/geeksearch.php?action=search&objecttype=boardgame&q=${encodeURIComponent(n.title)}`,
@@ -175,19 +175,19 @@
     queueHead: "Get next",
     recTier1: "Play this next",
     creatorBar: "Designer",
-    creatorNote: (avg, n) => `${avg}★ avg of ${n} owned`,
+    creatorNote: (avg, n) => `${avg}★ avg of ${n} of mine`,
     newCreator: "new designer",
-    seriesYes: "same family as one you own", seriesNo: "standalone / new",
+    seriesYes: "same family as one you know", seriesNo: "standalone / new",
     linkedAvg: "★ avg of linked games",
     linksNote: (n) => `${n} of your games`,
     overviewBy: "Every game on my shelf, and what to play next.",
-    tileRead: "Games owned",
+    tileRead: "Owned or played",
     tile3: { label: "Designers", value: (bs) => new Set(bs.map((b) => b.author).filter(Boolean)).size },
     perYear: "Added per year",
     topCreators: "Favourite designers",
-    key: { read: "Owned", reading: "On the table", queue: "Wishlist" },
+    key: { read: "Owned / played", reading: "On the table", queue: "Wishlist" },
     hint: "Click anything to dive in. Recommendations are linked to the games that inspired them.",
-    tag: { reading: "▶ on the table", queue: "wishlist", read: "owned" },
+    tag: { reading: "▶ on the table", queue: "wishlist", read: (n) => n.owned === false ? "played" : "owned" },
     addRowNote: "Look it up and add it to your shelf",
     ed: {
       genre: "category", Genre: "Category",
@@ -252,14 +252,15 @@
       const bases = rows.filter((r) => r.itemtype !== "expansion").map((r) => r.objectname);
       const items = [];
       for (const r of rows) {
-        const shelf = r.own === "1" ? "read" : want(r) ? "to-read" : null;
-        if (!shelf) continue; // previously owned, for trade only, ...
+        const played = r.own !== "1" && (stars(r.rating) || int(r.numplays) || r.prevowned === "1"); // rated / played / used to own: on the map, marked "not owned"
+        const shelf = r.own === "1" || played ? "read" : want(r) ? "to-read" : null;
+        if (!shelf) continue; // for trade only, ...
         const exp = r.itemtype === "expansion", lo = int(r.minplayers), w = parseFloat(r.avgweight);
         const base = exp ? bases.filter((b) => r.objectname.startsWith(b)).sort((a, b) => b.length - a.length)[0] || null : null;
         items.push({ id: "bgg-" + r.objectid, bggId: r.objectid, title: r.objectname, author: "", year: int(r.yearpublished),
           players: lo ? [lo, int(r.maxplayers) || lo] : null, playtime: int(r.playingtime) || int(r.maxplaytime), weight: w > 0 ? Math.round(w * 10) / 10 : null,
           plays: int(r.numplays), note: (r.comment || "").trim() || null, rating: shelf === "read" ? stars(r.rating) : null, shelf,
-          ...(exp ? { expansion: true } : {}), series: base, dateRead: r.acquisitiondate || null, cover: null });
+          ...(exp ? { expansion: true } : {}), series: base, dateRead: r.acquisitiondate || null, cover: null, ...(played ? { owned: false } : {}) });
       }
       for (const it of items) if (!it.expansion && items.some((x) => x.series === it.title)) it.series = it.title; // ties expansions to their base game
       // designers + a photo from Wikidata, matched by BGG id (one query; best effort)

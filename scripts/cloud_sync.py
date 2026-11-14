@@ -121,7 +121,7 @@ def snapshot(prof, ov, pk, kind="books"):
             for f in GAME_FIELDS:
                 if p.get(f) not in (None, "") and b.get(f) in (None, ""):
                     b[f] = p[f]
-    more = ("players", "playtime", "weight", "plays", "note", "expansion") if kind == "games" else ()  # a note is the owner's own comment
+    more = ("players", "playtime", "weight", "plays", "note", "expansion", "owned") if kind == "games" else ()  # a note is the owner's own comment
     row = lambda b, *extra: {k: b.get(k) for k in ("id", "title", "author", "genres", "series", *more, *extra) if b.get(k) not in (None, [], "")}
     reading = [b for b in queue if b.get("shelf") == "reading"]
     to_read = [b for b in queue if b.get("shelf") != "reading"]

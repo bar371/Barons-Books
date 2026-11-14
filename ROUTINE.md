@@ -88,10 +88,10 @@ name may be obscure or homemade: never invent its details, just give categories.
 **`recs`.** Use real, published board games only. Each rec takes `title`, `author` (designer), `year`, `genres`
 (categories), `because` (ids from `read`), `reason` and `fit`, plus `players` and `playtime` when you know them.
 
-**Size and focus.** Aim for about 2 picks per owned game, between 10 and 40 in all.
+**Size and focus.** Aim for about 2 picks per game in `read`, between 10 and 40 in all. Games marked `"owned": false` were played and rated but not bought: they count as taste just like owned ones.
 
 - Look at what they rate highly: mechanisms, weight, player counts and themes.
-- Never repeat anything they own, have on the table or have on the wishlist. Expansions of games they own are welcome when they're notable.
+- Never repeat anything in `read` (owned or just played), on the table or have on the wishlist. Expansions of games they own are welcome when they're notable.
 - Low ratings are signals against that style of game.
 
 The push command looks up each pick on Wikipedia and Wikidata for a picture and BoardGameGeek link.
