@@ -303,4 +303,5 @@
   for (const [sel, prop, v] of K.dom || []) { const el = document.querySelector(sel); if (el) el[prop] === undefined ? el.setAttribute(prop, v) : (el[prop] = v); }
   if (K.dom) { const q = document.querySelector("#t-queue"), t = q?.parentElement?.lastChild; if (t?.nodeType === 3) t.nodeValue = "Wishlist"; }
   document.documentElement.dataset.kind = K.id; // lets style.css theme each kind
+  if (K.id === "games") document.head.append(Object.assign(document.createElement("meta"), { name: "referrer", content: "no-referrer" })); // publisher sites often refuse pictures shown on other sites
 })();

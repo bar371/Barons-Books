@@ -79,6 +79,7 @@
       if (!(it.genres || []).length && p.genres) it.genres = p.genres.filter((g) => ids.has(g));
       if (!it.blurb && p.blurb) it.blurb = p.blurb;
       for (const f of ["author", "year", "players", "playtime", "weight", "bggId", "series"]) if (p[f] != null && (it[f] == null || it[f] === "")) it[f] = p[f];
+      if (p.cover && (!it.cover || K.isPhoto?.(it.cover))) it.cover = p.cover; // games: box picture Claude found on the publisher's site
       if (p.fit != null) it.fit = p.fit;
       it.pending = false;
     }

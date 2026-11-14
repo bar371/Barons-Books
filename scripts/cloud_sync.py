@@ -3,6 +3,7 @@
   python scripts/cloud_sync.py pull [--all]          who needs picks -> data/cloud/todo.json + one snapshot per library
   python scripts/cloud_sync.py push <slug> [--games] validate the picks file, add covers, save to Supabase
   python scripts/cloud_sync.py fail <slug> [--games] mark that person's running request as failed
+  python scripts/cloud_sync.py og <page-url>...      candidate box pictures on each web page, saved to data/cloud/covers/
 
 Two kinds of library: books (snapshot data/cloud/<slug>.json, picks <slug>.picks.json) and board games
 (<slug>.games.json, picks <slug>.games.picks.json). Each todo entry says which kind and which files.
@@ -121,6 +122,8 @@ def snapshot(prof, ov, pk, kind="books"):
             for f in GAME_FIELDS:
                 if p.get(f) not in (None, "") and b.get(f) in (None, ""):
                     b[f] = p[f]
+            if p.get("cover") and (not b.get("cover") or is_photo(b["cover"])):
+                b["cover"] = p["cover"]
     more = ("players", "playtime", "weight", "plays", "note", "expansion", "owned") if kind == "games" else ()  # a note is the owner's own comment
     row = lambda b, *extra: {k: b.get(k) for k in ("id", "title", "author", "genres", "series", *more, *extra) if b.get(k) not in (None, [], "")}
     reading = [b for b in queue if b.get("shelf") == "reading"]
@@ -138,7 +141,73 @@ def snapshot(prof, ov, pk, kind="books"):
     }
     if kind == "games":  # games added by name (or with thin Wikidata entries) need their details filled in
         snap["needDetails"] = [b["id"] for b in allb if any(b.get(f) in (None, "", []) for f in ("author", "year", "players", "playtime"))]
+        snap["needCover"] = [b["id"] for b in allb if not b.get("cover") or is_photo(b["cover"])]
     return snap
+
+
+def is_photo(u):  # Wikimedia Commons pictures are mostly gameplay photos, not the box
+    return bool(re.search(r"commons\.wikimedia\.org/wiki/Special:FilePath|/wikipedia/commons/", u or ""))
+
+
+UA = {"User-Agent": "Mozilla/5.0 (compatible; library-picks/1.0; +https://github.com/bar371/Barons-Books)"}
+BANNED = re.compile(r"boardgamegeek\.com|geekdo|bgg\.cc", re.I)  # BGG's terms: art only through their API (token pending)
+
+
+def img_ok(u):
+    """Is u a public https picture that loads without cookies? (what the site's <img> needs)"""
+    if not isinstance(u, str) or not u.startswith("https://") or BANNED.search(u) or len(u) > 1000:
+        return False
+    try:
+        with urllib.request.urlopen(urllib.request.Request(u, headers={**UA, "Range": "bytes=0-4095"}), timeout=10) as r:
+            return r.status in (200, 206) and r.headers.get("Content-Type", "").startswith("image/")
+    except Exception:
+        return False
+
+
+def check_imgs(urls):
+    from concurrent.futures import ThreadPoolExecutor
+    urls = sorted({u for u in urls if u})
+    with ThreadPoolExecutor(12) as ex:
+        return dict(zip(urls, ex.map(img_ok, urls)))
+
+
+def og(pages):
+    """Candidate box pictures from each web page (og:image first, then large product images). Each one that loads is
+    saved under data/cloud/covers/ so it can be looked at before use."""
+    from concurrent.futures import ThreadPoolExecutor
+    (OUT / "covers").mkdir(parents=True, exist_ok=True)
+    def one(n, p):
+        if BANNED.search(p):
+            return p, "BoardGameGeek pages are off limits"
+        try:
+            html = urllib.request.urlopen(urllib.request.Request(p, headers=UA), timeout=12).read(1_500_000).decode("utf8", "replace")
+        except Exception as e:
+            return p, f"page failed: {e}"
+        found = []
+        for m in re.finditer(r"<meta[^>]+>", html, re.I):
+            t = m.group(0)
+            if re.search(r"""(property|name)=["'](og:image(:secure_url)?|twitter:image)["']""", t, re.I):
+                c = re.search(r"""content=["']([^"']+)""", t, re.I)
+                if c: found.append(c.group(1))
+        found += re.findall(r"""(?:src|data-src|href)=["']([^"' ]+\.(?:jpe?g|png|webp)(?:\?[^"' ]*)?)["']""", html, re.I)
+        out, seen = [], set()
+        for u in found:
+            u = urllib.parse.urljoin(p, u.replace("&amp;", "&"))
+            if u.startswith("http://"): u = "https://" + u[7:]
+            if u in seen or re.search(r"logo|favicon|icon|banner|placeholder|avatar|sprite|flag|payment", u, re.I): continue
+            seen.add(u)
+            if not img_ok(u): continue
+            f = OUT / "covers" / f"{n}-{len(out)}{os.path.splitext(urllib.parse.urlparse(u).path)[1][:5] or '.img'}"
+            try:
+                f.write_bytes(urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=12).read(4_000_000))
+                out.append({"url": u, "file": f.relative_to(ROOT).as_posix()})
+            except Exception:
+                continue
+            if len(out) >= 5: break
+        return p, out or "no usable picture on that page"
+    with ThreadPoolExecutor(8) as ex:
+        res = list(ex.map(lambda a: one(*a), enumerate(pages)))
+    print(json.dumps(dict(res), indent=1))
 
 
 def pull(everyone):
@@ -175,6 +244,7 @@ def pull(everyone):
                     "currentRecs": len(snap["currentPicks"].get("recs") or [])}
             if kind == "games":
                 item["needDetails"] = len(snap["needDetails"])
+                item["needCover"] = len(snap["needCover"])
             todo.append(item)
             if asked:
                 api(f"/refresh_requests?id=in.({','.join(map(str, asked))})", "PATCH", {"status": "running"}, "return=minimal")
@@ -264,6 +334,7 @@ def push(slug, kind="books"):
     ids = {b["id"] for b in snap["read"] + snap["reading"] + snap["toRead"]}
     read_ids = {b["id"] for b in snap["read"]}
     books = dict(snap["currentPicks"].get("books") or {})
+    ok = check_imgs([b.get("cover") for b in (out.get("books") or {}).values()] + [r.get("cover") for r in out.get("recs") or []]) if kind == "games" else {}
     for i, b in (out.get("books") or {}).items():
         if i not in ids:
             warn.append(f"book {i}: not in the library"); continue
@@ -275,6 +346,9 @@ def push(slug, kind="books"):
         if isinstance(b.get("fit"), (int, float)): e["fit"] = max(0, min(100, int(b["fit"])))
         if kind == "games":
             e.update(game_details(b))
+            if b.get("cover"):
+                if ok.get(b["cover"]): e["cover"] = b["cover"]
+                else: warn.append(f"game {i}: cover doesn't load or isn't allowed: {b['cover'][:100]}")
         if e: books[i] = {**books.get(i, {}), **e}
     owned = {key(b["title"]) for b in snap["read"] + snap["reading"] + snap["toRead"]}
     fixed = {key(t.split(" — ")[0]) for t in snap["fixedRecs"]}
@@ -298,7 +372,9 @@ def push(slug, kind="books"):
             # picture lookups are best effort (the site also finds box covers itself): stop after ~2 minutes so the save always happens
             late = time.monotonic() - t0 > 120
             look = {} if late or (prev.get("cover") and prev.get("bggId")) else wd_game(r["title"])
-            rec["cover"] = prev.get("cover") or look.get("cover")
+            web = r.get("cover") if ok.get(r.get("cover")) else None
+            if r.get("cover") and not web: warn.append(f"rec {r['title']}: cover doesn't load or isn't allowed")
+            rec["cover"] = web or prev.get("cover") or look.get("cover")
             rec["bggId"] = prev.get("bggId") or look.get("bggId")
             for f in ("players", "playtime"):
                 rec[f] = rec.get(f) or look.get(f)
@@ -343,6 +419,8 @@ if __name__ == "__main__":
         pull("--all" in a)
     elif a[:1] == ["push"] and len(a) == 2:
         push(a[1], kind)
+    elif a[:1] == ["og"] and len(a) > 1:
+        og(a[1:])
     elif a[:1] == ["fail"] and len(a) == 2:
         fail(a[1], kind)
     else:

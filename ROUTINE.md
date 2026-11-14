@@ -70,6 +70,7 @@ Read the entry's `snapshot` (`data/cloud/<slug>.games.json`). It has the same sh
 - `author` is the **designer**.
 - `taxonomy` holds board-game **categories**.
 - `needDetails` lists games missing a designer, year, player count or play time.
+- `needCover` lists games with no box picture yet (see "Box covers from the web" below).
 
 Write `data/cloud/<slug>.games.picks.json` in the same format as section 2, with these additions.
 
@@ -95,6 +96,24 @@ name may be obscure or homemade: never invent its details, just give categories.
 - Low ratings are signals against that style of game.
 
 The push command looks up each pick on Wikipedia and Wikidata for a picture and BoardGameGeek link.
+
+### Box covers from the web (games only)
+
+Wikipedia only has box art for famous games, so find the rest on the web. Do this for every id in the snapshot's
+`needCover` (games in the library with no picture yet) and for every rec whose title has no `cover` in `currentPicks.recs`.
+
+1. Use **WebSearch** to find the game's official page, e.g. `"Century Spice Road" board game Plan B Games`.
+   Prefer the **publisher's own site**. If that has nothing usable, a big shop's product page is fine.
+   **Never use boardgamegeek.com or geekdo images**: their terms only allow their art through their API.
+2. Run `python3 scripts/cloud_sync.py og <page-url> [<page-url> ...]` (several pages at once is fastest). For each page it
+   lists up to 5 candidate pictures that load, each saved under `data/cloud/covers/`.
+3. **Look at the saved files with Read** and pick the one that is the game's **box** (a flat cover or a 3D box shot).
+   Not a logo, a banner, a gameplay or components photo, a person, or a different game or edition.
+4. Put its `url` as `"cover"` on the entry: in `books[<id>]` for a library game, or on the rec itself.
+
+If you can't find a clear box picture for a game in a couple of tries, leave `cover` out; the site then shows a name tile.
+Work in batches (search several games, then one `og` call for all their pages) and spend at most about 15 minutes on covers
+in total. The push checks every cover loads and drops the ones that don't.
 
 ## 3. Save
 
