@@ -5,6 +5,7 @@
   const URL_ = "https://vimynskvwneemuqplujf.supabase.co";
   const KEY = "sb_publishable_TBQcptpeWuANbjitnKqjRw_kpcI2nln";
   const SKEY = "bl-session";
+  const K = window.KIND || { id: "books", tables: { edits: "edits", picks: "picks" } }; // which tables hold this kind of library
   const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} } };
 
   let session = null;
@@ -87,17 +88,17 @@
       return { slug: prof?.slug || want || "baron", profile: prof, isMine: !!(prof && mine && prof.id === mine.id), ok };
     },
     async loadEdits(userId) {
-      try { const rows = await rest(`/edits?user_id=eq.${encodeURIComponent(userId)}&select=data,updated_at`); return rows?.[0]?.data || null; }
+      try { const rows = await rest(`/${K.tables.edits}?user_id=eq.${encodeURIComponent(userId)}&select=data,updated_at`); return rows?.[0]?.data || null; }
       catch (e) { console.warn("edits not loaded:", e.message); return null; }
     },
     // Claude's picks for a library (written by the picks routine; see ROUTINE.md)
     async loadPicks(userId) {
-      try { const rows = await rest(`/picks?user_id=eq.${encodeURIComponent(userId)}&select=data`); return rows?.[0]?.data || null; }
+      try { const rows = await rest(`/${K.tables.picks}?user_id=eq.${encodeURIComponent(userId)}&select=data`); return rows?.[0]?.data || null; }
       catch (e) { if (e.status !== 404) console.warn("picks not loaded:", e.message); return null; }
     },
     async saveEdits(data) {
       if (!session) throw new Error("Not signed in");
-      await rest("/edits?on_conflict=user_id", { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+      await rest(`/${K.tables.edits}?on_conflict=user_id`, { method: "POST", headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
         body: JSON.stringify({ user_id: session.user.id, data, updated_at: new Date().toISOString() }) });
     },
     async setPublic(v) {
@@ -107,7 +108,7 @@
     },
     async requestRefresh(note) {
       if (!session) throw new Error("Not signed in");
-      await rest("/refresh_requests", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ user_id: session.user.id, note: note || null }) });
+      await rest("/refresh_requests", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ user_id: session.user.id, note: note || null, ...(K.id === "books" ? {} : { kind: K.id }) }) });
     },
   };
 })();

@@ -1,8 +1,9 @@
-/* Baron's Library — an interactive book constellation.
+/* Baron's Library — an interactive book (or board game) constellation; per-kind words live in kind.js.
    Canvas + d3-force. Data comes from data.json (built by scripts/build_graph.py). */
 (() => {
 "use strict";
 const $ = (s) => document.querySelector(s);
+const K = window.KIND; // words, links and sources for this kind of library (kind.js)
 const canvas = $("#stage"), ctx = canvas.getContext("2d");
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -69,7 +70,7 @@ function init(d) {
   bindUI();
   renderLegend();
   renderPanel();
-  $("#brand-sub").textContent = `${d.meta.read} read · ${d.meta.queued || 0} queued · ${d.meta.recommended} recommended` + (d.meta.sample ? " · sample data" : "");
+  $("#brand-sub").textContent = K.sub(d.meta) + (d.meta.sample ? " · sample data" : "");
   applyLayout(1, true);
   sim.tick(160);
   fitView(vNodes, false);
@@ -89,7 +90,7 @@ function init(d) {
 function build() {
   const gmap = new Map(data.genres.map((g) => [g.id, g]));
   const add = (n) => { n.a = 1; n.s = 1; n.born = 0; n.vis = false; n.x = (Math.random() - .5) * 60; n.y = (Math.random() - .5) * 60; nodes.push(n); byId.set(n.id, n); return n; };
-  add({ id: "root", kind: "root", name: `${data.meta?.owner || "Baron"}'s Library`, color: "#ffd43b", rad: 34, gset: new Set() });
+  add({ id: "root", kind: "root", name: `${data.meta?.owner || "Baron"}'s ${K.lib}`, color: "#ffd43b", rad: 34, gset: new Set() });
   for (const g of data.genres.filter((g) => !g.parent)) genreNodes.set(g.id, add({ id: "g:" + g.id, gid: g.id, kind: "macro", name: g.name, color: g.color, rad: 26, count: g.count, gset: new Set() }));
   for (const g of data.genres.filter((g) => g.parent)) genreNodes.set(g.id, add({ id: "g:" + g.id, gid: g.id, kind: "sub", name: g.name, color: g.color, parentG: g.parent, rad: 15, count: g.count, gset: new Set() }));
 
@@ -558,9 +559,9 @@ function showTip(n, cx, cy) {
   if (isItem(n)) {
     h = `<b>${esc(n.title)}</b><small>${esc(n.author)}${n.year ? " · " + n.year : ""}</small>`;
     if (n.kind === "rec") h += `<p class="tipm">★ ${n.score}% match · #${n.rank} of ${data.recs.length}</p>${n.reason ? `<p>✦ ${esc(trunc(n.reason, 110))}</p>` : ""}`;
-    else if (n.kind === "queue") h += `<p>${n.shelf === "reading" ? "▶ Reading right now" : n.rank ? `🔖 Read-next #${n.rank} of ${qCount()} · ${n.score}%` : "🔖 On my to-read list"}</p>`;
+    else if (n.kind === "queue") h += `<p>${n.shelf === "reading" ? K.tipReading : K.tipQueue(n.rank, qCount(), n.score)}</p>`;
     else if (n.rating) h += `<p><span class="stars">${"★".repeat(n.rating)}<i>${"★".repeat(5 - n.rating)}</i></span></p>`;
-  } else h = `<b>${esc(n.name)}</b><small>${n.count} book${n.count === 1 ? "" : "s"} · click to ${focusGenre === n.gid ? "show all" : "isolate"}</small>`;
+  } else h = `<b>${esc(n.name)}</b><small>${K.count(n.count)} · click to ${focusGenre === n.gid ? "show all" : "isolate"}</small>`;
   tip.innerHTML = h; tip.hidden = false;
   const r = tip.getBoundingClientRect();
   tip.style.left = Math.min(cx, innerWidth - r.width - 24) + "px"; tip.style.top = Math.min(cy, innerHeight - r.height - 24) + "px";
@@ -589,21 +590,21 @@ function readNextHTML(n) {
   const tier = n.rank <= 3 ? "Start here" : n.rank <= 8 ? "Up next" : n.rank <= 20 ? "When the mood strikes" : "Someday";
   const bar = (label, v, note) => `<div class="part"><span>${label}</span><i style="--w:${v}%"></i><b>${note}</b></div>`;
   return `<div class="match" style="--c:${n.color}"><div class="mring" style="--p:${n.score}"><b>${n.score}<small>%</small></b></div>
-    <div><strong>#${n.rank} <em>of ${N} to read</em></strong><span>${tier}</span></div></div>
-    <div class="parts">${bar("Taste fit", p.taste, "my call")}${bar("Author", p.author, p.nAuthor ? p.avgStars + "★ avg of " + p.nAuthor + " read" : "new author")}${bar("Series", p.series, p.series === 100 ? "continues a series" : "standalone / new")}</div>`;
+    <div><strong>#${n.rank} <em>of ${N} ${K.ofQueue}</em></strong><span>${tier}</span></div></div>
+    <div class="parts">${bar("Taste fit", p.taste, "my call")}${bar(K.creatorBar, p.author, p.nAuthor ? K.creatorNote(p.avgStars, p.nAuthor) : K.newCreator)}${bar("Series", p.series, p.series === 100 ? K.seriesYes : K.seriesNo)}</div>`;
 }
 function readNextListHTML() {
   const top = (data.queue || []).filter((q) => q.rank != null).sort((a, b) => a.rank - b.rank).slice(0, 5);
   if (!top.length) return "";
-  return `<h4>Read next</h4><div class="minis picks">${top.map((q) => { const n = byId.get(q.id); return `<button class="mini" data-go="${esc(n.id)}"><b class="rk" style="--c:${n.color}">${n.rank}</b>${thumb(n, 30)}<span><b>${esc(n.title)}</b><small>${esc(n.author)}</small></span><em class="pct" style="--c:${n.color}">${n.score}%</em></button>`; }).join("")}</div>`;
+  return `<h4>${K.queueHead}</h4><div class="minis picks">${top.map((q) => { const n = byId.get(q.id); return `<button class="mini" data-go="${esc(n.id)}"><b class="rk" style="--c:${n.color}">${n.rank}</b>${thumb(n, 30)}<span><b>${esc(n.title)}</b><small>${esc(n.author)}</small></span><em class="pct" style="--c:${n.color}">${n.score}%</em></button>`; }).join("")}</div>`;
 }
 function matchHTML(n) {
   const p = n.parts || {}, N = data.recs.length;
-  const tier = n.rank <= 5 ? "Read this next" : n.rank <= 15 ? "Strong match" : n.rank <= 35 ? "Good match" : "Worth a look";
+  const tier = n.rank <= 5 ? K.recTier1 : n.rank <= 15 ? "Strong match" : n.rank <= 35 ? "Good match" : "Worth a look";
   const bar = (label, v, note) => `<div class="part"><span>${label}</span><i style="--w:${v}%"></i><b>${note}</b></div>`;
   return `<div class="match" style="--c:${n.color}"><div class="mring" style="--p:${n.score}"><b>${n.score}<small>%</small></b></div>
     <div><strong>#${n.rank} <em>of ${N} picks</em></strong><span>${tier}</span></div></div>
-    <div class="parts">${bar("Taste fit", p.taste, "my call")}${bar("Your ratings", p.ratings, p.avgStars ? p.avgStars + "★ avg of linked books" : "no ratings yet")}${bar("Connections", p.links, (n.because || []).length + " of your books")}</div>`;
+    <div class="parts">${bar("Taste fit", p.taste, "my call")}${bar("Your ratings", p.ratings, p.avgStars ? p.avgStars + K.linkedAvg : "no ratings yet")}${bar("Connections", p.links, K.linksNote((n.because || []).length))}</div>`;
 }
 function topPicksHTML() {
   const top = data.recs.slice().sort((a, b) => a.rank - b.rank).slice(0, 8);
@@ -620,26 +621,26 @@ function renderPanel() {
   renderPanelVisibility();
 }
 function overviewHTML() {
-  const bs = data.books, rated = bs.filter((b) => b.rating), pages = d3.sum(bs, (b) => b.pages || 0);
+  const bs = data.books, rated = bs.filter((b) => b.rating), pages = K.tile3.value(bs);
   const avg = rated.length ? d3.mean(rated, (b) => b.rating) : 0;
   const hist = d3.range(1, 6).map((r) => rated.filter((b) => b.rating === r).length), hmax = Math.max(1, ...hist);
   const yrs = d3.rollups(bs.filter((b) => b.dateRead), (v) => v.length, (b) => b.dateRead.slice(0, 4)).sort((a, b) => a[0] - b[0]).slice(-9), ymax = Math.max(1, ...yrs.map((y) => y[1]));
   const au = d3.rollups(bs, (v) => v.length, (b) => b.author).sort((a, b) => b[1] - a[1]).slice(0, 5);
-  return `<h2>Overview</h2><p class="by">Every book I've read, and what to read next.</p>
+  return `<h2>Overview</h2><p class="by">${K.overviewBy}</p>
   <div class="tiles">
-    <div class="tile"><b data-n="${bs.length}">0</b><span>Books read</span></div>
+    <div class="tile"><b data-n="${bs.length}">0</b><span>${K.tileRead}</span></div>
     <div class="tile"><b data-n="${data.recs.length}">0</b><span>Recommended</span></div>
-    <div class="tile"><b data-n="${pages}">0</b><span>Pages</span></div>
+    <div class="tile"><b data-n="${pages}">0</b><span>${K.tile3.label}</span></div>
     <div class="tile"><b>${avg ? avg.toFixed(1) : "–"}</b><span>Avg rating</span></div>
   </div>
   ${rated.length ? `<h4>How I rate</h4><div class="bars">${hist.map((v, i) => `<div style="height:${(v / hmax) * 100}%;animation-delay:${i * 70}ms" data-t="${i + 1}★ · ${v}"></div>`).join("")}</div><div class="axis"><span>1★</span><span>5★</span></div>` : ""}
-  ${yrs.length > 1 ? `<h4>Read per year</h4><div class="bars">${yrs.map((y, i) => `<div style="height:${(y[1] / ymax) * 100}%;animation-delay:${i * 60}ms" data-t="${y[0]} · ${y[1]}"></div>`).join("")}</div><div class="axis"><span>${yrs[0][0]}</span><span>${yrs.at(-1)[0]}</span></div>` : ""}
-  <h4>Most-read authors</h4><ul class="authors">${au.map((a) => `<li data-author="${esc(a[0])}"><b>${esc(a[0])}</b><small>${a[1]}</small></li>`).join("")}</ul>
+  ${yrs.length > 1 ? `<h4>${K.perYear}</h4><div class="bars">${yrs.map((y, i) => `<div style="height:${(y[1] / ymax) * 100}%;animation-delay:${i * 60}ms" data-t="${y[0]} · ${y[1]}"></div>`).join("")}</div><div class="axis"><span>${yrs[0][0]}</span><span>${yrs.at(-1)[0]}</span></div>` : ""}
+  <h4>${K.topCreators}</h4><ul class="authors">${au.map((a) => `<li data-author="${esc(a[0])}"><b>${esc(a[0])}</b><small>${a[1]}</small></li>`).join("")}</ul>
   ${topPicksHTML()}
   ${readNextListHTML()}
   <h4>The key</h4>
-  <ul class="key"><li><i class="k-read"></i>Read</li><li><i class="k-reading"></i>Reading now</li><li><i class="k-queue"></i>To read (${data.queue?.length || 0})</li><li><i class="k-rec"></i>Recommended</li></ul>
-  <p class="hint">Click anything to dive in. Recommendations are linked to the books that inspired them.</p>`;
+  <ul class="key"><li><i class="k-read"></i>${K.key.read}</li><li><i class="k-reading"></i>${K.key.reading}</li><li><i class="k-queue"></i>${K.key.queue} (${data.queue?.length || 0})</li><li><i class="k-rec"></i>Recommended</li></ul>
+  <p class="hint">${K.hint}</p>`;
 }
 function animateTiles() {
   document.querySelectorAll(".tile b[data-n]").forEach((el) => {
@@ -649,29 +650,29 @@ function animateTiles() {
 }
 function detailHTML(n) {
   const isRec = n.kind === "rec", gen = (n.genreIds || []).map((g) => genreNodes.get(g)).filter(Boolean);
-  const url = !isRec && /^\d+$/.test(n.id) ? `https://www.goodreads.com/book/show/${n.id}` : `https://www.goodreads.com/search?q=${encodeURIComponent(n.title + " " + n.author)}`;
+  const url = K.link(n, isRec);
   let h = `<button class="close" data-close aria-label="Close">✕</button>
-  <div class="cover-wrap" style="--c:${n.color}">${n.cover ? `<img class="cover" src="${esc(n.cover)}" alt="Cover of ${esc(n.title)}">` : `<div class="cover noart" style="background:linear-gradient(150deg,${n.color},${shade(n.color, -0.65)})"><span>${esc(n.title)}</span></div>`}</div>
-  <span class="kind ${isRec ? "rec" : n.kind === "queue" ? "queue" : "read"}" style="--c:${n.color}">${isRec ? "✦ Recommended" : n.kind === "queue" ? (n.shelf === "reading" ? "▶ Reading now" : "🔖 To read") : "Read"}</span>
+  <div class="cover-wrap" style="--c:${n.color}">${n.cover ? `<img class="cover" src="${esc(n.cover)}" alt="${K.coverAlt} ${esc(n.title)}">` : `<div class="cover noart" style="background:linear-gradient(150deg,${n.color},${shade(n.color, -0.65)})"><span>${esc(n.title)}</span></div>`}</div>
+  <span class="kind ${isRec ? "rec" : n.kind === "queue" ? "queue" : "read"}" style="--c:${n.color}">${isRec ? K.kindLabel.rec : n.kind === "queue" ? (n.shelf === "reading" ? K.kindLabel.reading : K.kindLabel.queue) : K.kindLabel.read}</span>
   <h2>${esc(n.title)}</h2><p class="by">${esc(n.author)}</p>`;
   const rate = window.LibraryEdits?.rateHTML?.(n);
   if (rate) h += rate; else if (!isRec && n.rating) h += stars5(n.rating);
-  const facts = [n.series && `${esc(n.series)}${n.seriesNo ? " #" + n.seriesNo : ""}`, n.year, n.pages && `${n.pages} pages`, n.dateRead && `read ${esc(n.dateRead)}`, !isRec && n.avg && `avg ${n.avg}`].filter(Boolean);
+  const facts = K.facts(n, isRec, esc).filter(Boolean);
   if (facts.length) h += `<div class="facts">${facts.map((f) => `<span>${f}</span>`).join("")}</div>`;
   if (n.blurb) h += `<p class="blurb">${esc(n.blurb)}</p>`;
   if (isRec && n.reason) h += `<div class="why" style="--c:${n.color}">${esc(n.reason)}</div>`;
   if (isRec) h += matchHTML(n);
   else if (n.kind === "queue" && n.rank) h += readNextHTML(n);
-  if (gen.length) h += `<h4>Genres</h4><div class="chips">${gen.map((g) => `<button class="chip" style="--c:${g.color}" data-genre="${esc(g.gid)}">${esc(g.name)}</button>`).join("")}</div>`;
-  if (isRec) { const bs = (n.because || []).map((id) => byId.get(id)).filter(Boolean); if (bs.length) h += `<h4>Because I read</h4><div class="minis">${bs.map((b) => miniBtn(b)).join("")}</div>`; }
+  if (gen.length) h += `<h4>${K.Genres}</h4><div class="chips">${gen.map((g) => `<button class="chip" style="--c:${g.color}" data-genre="${esc(g.gid)}">${esc(g.name)}</button>`).join("")}</div>`;
+  if (isRec) { const bs = (n.because || []).map((id) => byId.get(id)).filter(Boolean); if (bs.length) h += `<h4>${K.because}</h4><div class="minis">${bs.map((b) => miniBtn(b)).join("")}</div>`; }
   else {
     const recs = nodes.filter((r) => r.kind === "rec" && r.because?.includes(n.id));
     if (recs.length) h += `<h4>Leads to</h4><div class="minis">${recs.map((r) => miniBtn(r, (showRecs ? "" : "(hidden) ") + r.author)).join("")}</div>`;
     const sib = nodes.filter((b) => (b.kind === "book" || b.kind === "queue") && b !== n && ((b.series && b.series === n.series) || b.author === n.author)).slice(0, 5);
-    if (sib.length) h += `<h4>${n.series ? "In this series / by this author" : "More by this author"}</h4><div class="minis">${sib.map((b) => miniBtn(b, b.series ? b.series + (b.seriesNo ? " #" + b.seriesNo : "") : b.author)).join("")}</div>`;
+    if (sib.length) h += `<h4>${K.siblings(!!n.series)}</h4><div class="minis">${sib.map((b) => miniBtn(b, b.series ? b.series + (b.seriesNo ? " #" + b.seriesNo : "") : b.author)).join("")}</div>`;
   }
   h += window.LibraryEdits?.panelExtra?.(n) || "";
-  return h + `<a class="cta" href="${url}" target="_blank" rel="noopener">${isRec ? "Find on" : "Open in"} Goodreads ↗</a><button class="copylink" data-copy>🔗 Copy link to this book</button>`;
+  return h + `<a class="cta" href="${url}" target="_blank" rel="noopener">${K.linkLabel(isRec)}</a><button class="copylink" data-copy>${K.copyLink}</button>`;
 }
 
 document.addEventListener("click", (e) => {
@@ -681,7 +682,7 @@ document.addEventListener("click", (e) => {
   if (cp && selected) {
     const q = new URLSearchParams(location.search); q.set("book", selected.id);
     const link = location.origin + location.pathname + "?" + q.toString();
-    const done = (ok) => { if (!ok) return prompt("Copy this link:", link); cp.textContent = "✓ Link copied"; setTimeout(() => (cp.textContent = "🔗 Copy link to this book"), 2200); };
+    const done = (ok) => { if (!ok) return prompt("Copy this link:", link); cp.textContent = "✓ Link copied"; setTimeout(() => (cp.textContent = K.copyLink), 2200); };
     const write = navigator.clipboard?.writeText(link);
     if (!write) done(false); // some browsers never answer: fall back to the box after a moment
     else Promise.race([write.then(() => true, () => false), new Promise((r) => setTimeout(() => r(false), 1500))]).then(done);
@@ -695,7 +696,7 @@ document.addEventListener("click", (e) => {
 function renderLegend() {
   const macros = data.genres.filter((g) => !g.parent), f = focusGenre && genreNodes.get(focusGenre), activeMacro = f ? (f.kind === "macro" ? f.gid : f.parentG) : null;
   $("#legend").classList.toggle("dim", !!f);
-  $("#legend").innerHTML = `<h3>Genres ${f ? `<button data-clear>Show all</button>` : ""}</h3>` + macros.map((g) => {
+  $("#legend").innerHTML = `<h3>${K.Genres} ${f ? `<button data-clear>Show all</button>` : ""}</h3>` + macros.map((g) => {
     const subs = data.genres.filter((s) => s.parent === g.id);
     return `<button class="macro ${activeMacro === g.id ? "on" : ""}" style="--c:${g.color}" data-g="${esc(g.id)}"><i></i><span>${esc(g.name)}</span><small>${g.count}</small></button>` +
       (activeMacro === g.id ? `<div class="subs">${subs.map((s) => `<button class="chip ${focusGenre === s.id ? "on" : ""}" style="--c:${s.color}" data-g="${esc(s.id)}">${esc(s.name)} <small>${s.count}</small></button>`).join("")}</div>` : "");
@@ -720,8 +721,8 @@ function runSearch() {
   // owners can add whatever they typed straight from here (Open Library search in the add-book dialog)
   if (window.LibraryEdits?.canAdd && s.length >= 3) resList.push({ kind: "add", query: q.value.trim() });
   resEl.innerHTML = resList.length ? resList.map((n, i) => n.kind === "add"
-    ? `<li data-i="${i}" class="add-row${i === 0 ? " sel" : ""}" tabindex="-1"><span class="ph plus">＋</span><span><b>Add “${esc(n.query)}”</b><small>Find it on Open Library and add it to your map</small></span><span class="tag">new</span></li>`
-    : `<li data-i="${i}" class="${i === 0 ? "sel" : ""}" tabindex="-1">${n.cover ? `<img src="${esc(n.cover)}" alt="">` : `<span class="ph"></span>`}<span><b>${esc(n.name)}</b><small>${n.author ? esc(n.author) : (n.count + " books")}</small></span><span class="tag">${n.kind === "rec" ? "✦ " + n.score + "%" : n.kind === "queue" ? (n.shelf === "reading" ? "▶ reading" : "to read") : n.kind === "book" ? "read" : "genre"}</span></li>`).join("") : `<li class="muted">No matches</li>`;
+    ? `<li data-i="${i}" class="add-row${i === 0 ? " sel" : ""}" tabindex="-1"><span class="ph plus">＋</span><span><b>Add “${esc(n.query)}”</b><small>${K.addRowNote}</small></span><span class="tag">new</span></li>`
+    : `<li data-i="${i}" class="${i === 0 ? "sel" : ""}" tabindex="-1">${n.cover ? `<img src="${esc(n.cover)}" alt="">` : `<span class="ph"></span>`}<span><b>${esc(n.name)}</b><small>${n.author ? esc(n.author) : n.count + " " + K.items}</small></span><span class="tag">${n.kind === "rec" ? "✦ " + n.score + "%" : n.kind === "queue" ? (n.shelf === "reading" ? K.tag.reading : K.tag.queue) : n.kind === "book" ? K.tag.read : "genre"}</span></li>`).join("") : `<li class="muted">No matches</li>`;
   resEl.hidden = false;
 }
 function chooseResult(i) {
@@ -763,7 +764,7 @@ function rebuild() {
   });
   if (focusGenre && !genreNodes.has(focusGenre)) focusGenre = null;
   selected = selected ? byId.get(selected.id) || null : null; hover = null;
-  $("#brand-sub").textContent = `${data.meta.read} read · ${data.meta.queued || 0} queued · ${data.meta.recommended} recommended`;
+  $("#brand-sub").textContent = K.sub(data.meta);
   renderLegend(); renderPanel(); applyLayout(fresh > 15 ? 0.8 : 0.55); // a small edit only needs a gentler nudge
 }
 window.Library = { get data() { return data; }, rebuild, select: (id) => select(byId.get(id) || null), node: (id) => byId.get(id), refreshPanel: () => renderPanel(), refreshLegend: () => renderLegend() };
@@ -777,7 +778,7 @@ function surprise() {
   setFocus(null); select(pool[Math.floor(Math.random() * pool.length)]);
 }
 function savePNG() {
-  canvas.toBlob((b) => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = "barons-library.png"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); });
+  canvas.toBlob((b) => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = K.png; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); });
 }
 function bindUI() {
   document.querySelectorAll(".modes button").forEach((b) => b.addEventListener("click", () => setMode(b.dataset.mode)));

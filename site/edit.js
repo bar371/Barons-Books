@@ -3,7 +3,8 @@
    never changes shape. Storage is this browser for now; the Supabase adapter swaps in once login exists.
    Turn edit mode on with ?edit in the URL (it is remembered on this device). */
 (() => {
-  const KEY = "bl-overlay-v1", EDIT = "bl-edit";
+  const K = window.KIND, E = K.ed; // per-kind words and sources (kind.js)
+  const KEY = K.storeKey, EDIT = "bl-edit";
   const PALETTE = ["#f783ac", "#b197fc", "#74c0fc", "#63e6be", "#ffc078", "#e599f7", "#a9e34b", "#ff8787"];
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
@@ -153,20 +154,20 @@
 
   // ---------- panel: re-tag a book ----------
   function panelExtra(n) {
-    if (!editing) return n.mine && n.pending ? `<p class="ed-note">Added by you · Claude adds genres & picks on the next update</p>` : n.picked ? `<p class="ed-note">✦ A fresh pick from Claude</p>` : "";
+    if (!editing) return n.mine && n.pending ? `<p class="ed-note">${E.pending}</p>` : n.picked ? `<p class="ed-note">✦ A fresh pick from Claude</p>` : "";
     const cur = n.genreIds || [];
     return `<div class="ed-box" data-ed-book="${esc(n.id)}"><h4>Edit genres</h4>
       <div class="chips">${cur.map((g) => `<span class="chip ed-chip">${esc(D().genres.find((x) => x.id === g)?.name || g)}<button data-ed-rm="${esc(g)}" aria-label="Remove">×</button></span>`).join("") || `<span class="muted">No genre yet</span>`}</div>
       ${genreSelect("ed-pick")}${newGenreForm()}
-      ${n.mine ? `<button class="ed-del">Remove this book</button>` : ""}
-      <p class="ed-note">${n.mine && n.pending ? "Added by you · Claude adds genres & picks on the next update" : "Changes recluster the map straight away"}</p></div>`;
+      ${n.mine ? `<button class="ed-del">${E.removeOne}</button>` : ""}
+      <p class="ed-note">${n.mine && n.pending ? E.pending : "Changes recluster the map straight away"}</p></div>`;
   }
   // in ✎ mode the stars under a read book's title become clickable
   function rateHTML(n) {
     if (!editing || n.kind !== "book") return "";
     return `<div class="ab-stars ed-stars" data-ed-rated="${esc(n.id)}" title="Click to change your rating">${[1, 2, 3, 4, 5].map((r) => `<button data-ed-rate="${r}" class="${r <= (n.rating || 0) ? "on" : ""}" aria-label="${r} stars">★</button>`).join("")}${n.rating ? `<button class="ed-unrate" data-ed-rate="0">clear</button>` : `<small>rate it</small>`}</div>`;
   }
-  function legendExtra() { return editing ? `<button class="ed-add-legend" data-ed-open>＋ Add a book</button>` : ""; }
+  function legendExtra() { return editing ? `<button class="ed-add-legend" data-ed-open>${E.addOne}</button>` : ""; }
   function setGenres(id, gs) { ov.assign[id] = [...new Set(gs)]; const b = ov.books.find((x) => x.id === id); if (b) b.genres = ov.assign[id]; commit(id); }
 
   document.addEventListener("change", (e) => {
@@ -193,8 +194,8 @@
   // ---------- add a book (Open Library search) ----------
   const modal = document.createElement("div");
   modal.id = "addbook"; modal.className = "modal"; modal.hidden = true;
-  modal.innerHTML = `<div class="card glass add-card"><h2>Add a book</h2>
-    <input id="ab-q" placeholder="Search by title or author…" autocomplete="off">
+  modal.innerHTML = `<div class="card glass add-card"><h2>${E.modalTitle}</h2>
+    <input id="ab-q" placeholder="${E.searchPh}" autocomplete="off">
     <p class="ab-hint">Adding several? Ctrl+click (⌘+click on a Mac), or tap ○, to pick more than one, even across searches.</p>
     <ul id="ab-res" class="ab-res"></ul><div id="ab-basket" hidden></div>
     <div id="ab-form" hidden></div><button class="ab-close" aria-label="Close">✕</button></div>`;
@@ -207,12 +208,12 @@
     setTimeout(() => abq.focus(), 30); if (abq.value) search();
   }
   function renderResults() {
-    abres.innerHTML = results.length ? results.map((b, i) => `<li data-i="${i}" class="${isPicked(b) ? "picked" : ""}">${b.cover_i ? `<img src="https://covers.openlibrary.org/b/id/${b.cover_i}-S.jpg" alt="">` : `<span class="ph"></span>`}<span><b>${esc(b.title)}</b><small>${esc((b.author_name || []).join(", "))}${b.first_publish_year ? " · " + b.first_publish_year : ""}</small></span><button class="ab-tick" data-tick aria-label="Pick">${isPicked(b) ? "✓" : ""}</button></li>`).join("") : `<li class="muted">No matches on Open Library</li>`;
+    abres.innerHTML = results.length ? results.map((b, i) => `<li data-i="${i}" class="${isPicked(b) ? "picked" : ""}">${b.thumb ? `<img src="${esc(b.thumb)}" alt="">` : `<span class="ph"></span>`}<span><b>${esc(b.title)}</b><small>${esc(b.small)}</small></span><button class="ab-tick" data-tick aria-label="Pick">${isPicked(b) ? "✓" : ""}</button></li>`).join("") : `<li class="muted">${E.noMatches}</li>`;
   }
   function renderBasket() {
     basket.hidden = !picks.length;
     basket.innerHTML = picks.length ? `<div class="chips">${picks.map((p, i) => `<span class="chip ed-chip">${esc(p.title)}<button data-unpick="${i}" aria-label="Remove">×</button></span>`).join("")}</div>
-      <button class="ab-save ab-next">Continue with ${picks.length} book${picks.length === 1 ? "" : "s"} →</button>` : "";
+      <button class="ab-save ab-next">${E.next(picks.length)}</button>` : "";
   }
   function togglePick(b) { picks = isPicked(b) ? picks.filter((p) => p.key !== b.key) : [...picks, b]; renderResults(); renderBasket(); }
   basket.addEventListener("click", (e) => {
@@ -228,8 +229,7 @@
     ctl?.abort(); ctl = new AbortController();
     abform.hidden = true; abres.innerHTML = `<li class="muted">Searching…</li>`;
     try {
-      const r = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(s)}&fields=key,title,author_name,first_publish_year,cover_i,isbn,number_of_pages_median&limit=8`, { signal: ctl.signal });
-      results = (await r.json()).docs || [];
+      results = await K.find(s, ctl.signal);
       renderResults();
     } catch (err) { if (err.name !== "AbortError") abres.innerHTML = `<li class="muted">Search failed, try again</li>`; }
   }
@@ -248,13 +248,13 @@
     const many = picks.length > 1, dup = picks.filter((p) => p.have);
     abform.hidden = false;
     abform.innerHTML = (many
-      ? `<div class="ab-many">${picks.map((p) => `<div title="${esc(p.title)}">${p.cover_i ? `<img src="https://covers.openlibrary.org/b/id/${p.cover_i}-M.jpg" alt="">` : `<span class="ph"></span>`}<small>${esc(p.title)}</small></div>`).join("")}</div>
+      ? `<div class="ab-many">${picks.map((p) => `<div title="${esc(p.title)}">${p.big ? `<img src="${esc(p.big)}" alt="">` : `<span class="ph"></span>`}<small>${esc(p.title)}</small></div>`).join("")}</div>
          ${dup.length ? `<p class="ed-note">Already on your map: ${dup.map((p) => "“" + esc(p.have.title) + "”").join(", ")}. Saving moves ${dup.length === 1 ? "it" : "them"} to the shelf you pick.</p>` : ""}`
-      : `<div class="ab-pick">${picks[0].cover_i ? `<img src="https://covers.openlibrary.org/b/id/${picks[0].cover_i}-M.jpg" alt="">` : ""}<div><b>${esc(picks[0].title)}</b><small>${esc((picks[0].author_name || [])[0] || "")}</small>${dup.length ? `<p class="ed-note">Already on your map as “${esc(dup[0].have.title)}”: saving moves it to the shelf you pick.</p>` : ""}</div></div>`)
-      + `<div class="ab-row"><label><input type="radio" name="ab-shelf" value="read" checked> Read</label><label><input type="radio" name="ab-shelf" value="to-read"> To read</label><label><input type="radio" name="ab-shelf" value="reading"> Reading now</label></div>
+      : `<div class="ab-pick">${picks[0].big ? `<img src="${esc(picks[0].big)}" alt="">` : ""}<div><b>${esc(picks[0].title)}</b><small>${esc(picks[0].creator)}</small>${dup.length ? `<p class="ed-note">Already on your map as “${esc(dup[0].have.title)}”: saving moves it to the shelf you pick.</p>` : ""}</div></div>`)
+      + `<div class="ab-row">${E.shelves.map(([v, label], i) => `<label><input type="radio" name="ab-shelf" value="${v}"${i ? "" : " checked"}> ${label}</label>`).join("")}</div>
       <div class="ab-row ab-stars">${[1, 2, 3, 4, 5].map((r) => `<button data-star="${r}" aria-label="${r} stars">★</button>`).join("")}<small>${many ? "rating for all of them (change any one later in ✎ mode)" : "your rating"}</small></div>
       <div class="ab-row">${genreSelect("ab-genre")}</div>${newGenreForm()}
-      <button class="ab-save ab-commit">${many ? `Add ${picks.length} books` : "Add to my library"}</button>${many ? `<button class="ed-del ab-back">← Back to picking</button>` : ""}`;
+      <button class="ab-save ab-commit">${many ? E.addMany(picks.length) : "Add to my library"}</button>${many ? `<button class="ed-del ab-back">← Back to picking</button>` : ""}`;
     abform.dataset.r = "0"; delete abform.dataset.g;
   }
   abform.addEventListener("click", (e) => {
@@ -267,16 +267,14 @@
     const g = abform.dataset.g || (sel && sel.value && sel.value !== "__new" ? sel.value : null);
     let first = null;
     for (const pick of picks) {
-      const id = "ol-" + pick.key.split("/").pop(); first = first || id;
+      const base = pick.make(), id = base.id; first = first || id;
       if (ov.books.some((b) => b.id === id)) continue;
-      ov.books.push({ id, olKey: pick.key, title: pick.title, author: (pick.author_name || ["Unknown"])[0], year: pick.first_publish_year || null,
-        pages: pick.number_of_pages_median || null, isbn13: (pick.isbn || []).find((x) => /^978[01]/.test(x)) || (pick.isbn || []).find((x) => x.length === 13) || null,
-        cover: pick.cover_i ? `https://covers.openlibrary.org/b/id/${pick.cover_i}-L.jpg` : null,
+      ov.books.push({ ...base,
         replaces: pick.have && !pick.have.mine ? pick.have.id : undefined, shelf, rating: shelf === "read" ? +abform.dataset.r || null : null, genres: g ? [g] : pick.have ? pick.have.genres || [] : [],
         dateRead: shelf === "read" ? new Date().toISOString().slice(0, 10) : null, added: new Date().toISOString(), pending: true });
     }
     const n = picks.length; picks = []; closeAdd(); commit(n === 1 ? first : null);
-    if (n > 1) setTimeout(() => toast(`Added ${n} books`), 2700);
+    if (n > 1) setTimeout(() => toast(E.added(n)), 2700);
   });
   abform.addEventListener("change", (e) => { if (e.target.classList.contains("ab-genre") && e.target.value === "__new") { abform.querySelector(".ed-new").hidden = false; abform.querySelector(".ed-gname").focus(); } });
 
@@ -284,7 +282,7 @@
   function setEditing(v) { editing = v && canEdit(); document.body.classList.toggle("editing", v); const b = document.querySelector("#b-edit"); if (b) b.classList.toggle("on", v); window.Library.refreshPanel(); window.Library.refreshLegend(); }
   function mountDock() {
     const dock = document.querySelector(".dock"); if (!dock || document.querySelector("#b-edit") || !canEdit()) return; // only for the library's owner
-    const add = document.createElement("button"); add.id = "b-add"; add.dataset.edOpen = ""; add.title = "Add a book"; add.textContent = "＋ Book";
+    const add = document.createElement("button"); add.id = "b-add"; add.dataset.edOpen = ""; add.title = E.dockAddTitle; add.textContent = E.dockAdd;
     const ed = document.createElement("button"); ed.id = "b-edit"; ed.title = "Edit mode"; ed.setAttribute("aria-label", "Edit mode"); ed.textContent = "✎";
     dock.insertBefore(ed, document.querySelector("#b-help")); dock.insertBefore(add, ed);
     ed.classList.toggle("on", editing); document.body.classList.toggle("editing", editing);
@@ -301,15 +299,15 @@
     if (sessionStorage.getItem("bl-welcome")) { sessionStorage.removeItem("bl-welcome"); setTimeout(() => toast("Welcome! Your email is confirmed."), 800); if (!ctx.isMine) window.Cloud.me().then((me) => me && go(me.slug)); }
     const linkErr = sessionStorage.getItem("bl-link-error"); if (linkErr) { sessionStorage.removeItem("bl-link-error"); setTimeout(() => toast("Link problem: " + linkErr), 800); }
     const owner = ctx.profile?.display_name || "Baron", h1 = document.querySelector(".brand h1");
-    if (h1) h1.innerHTML = `${esc(owner)}'s <em>Library</em>`;
-    document.title = `${owner}'s Library`;
+    if (h1) h1.innerHTML = `${esc(owner)}'s <em>${K.lib}</em>`;
+    document.title = `${owner}'s ${K.lib}`;
   }
   const acct = document.createElement("div"); acct.id = "account"; acct.className = "modal"; acct.hidden = true; document.body.appendChild(acct);
   acct.addEventListener("click", (e) => { if (e.target === acct || e.target.closest(".ab-close")) acct.hidden = true; });
   function loginForm(signup) {
     const C = window.Cloud;
     acct.innerHTML = `<form class="card glass add-card login"><h2>${signup ? "Create your library" : "Sign in"}</h2>
-      <p class="muted">${signup ? "Map your own reading: add books, build genres, and get picks. You'll stay signed in on this device." : "Sign in to edit your library. You'll stay signed in on this device."}</p>
+      <p class="muted">${signup ? E.signupBlurb : "Sign in to edit your library. You'll stay signed in on this device."}</p>
       ${signup ? `<input name="name" placeholder="Your name (shown as “Name's Library”)" maxlength="40" autocomplete="given-name" required>` : ""}
       <input name="email" type="email" placeholder="Email" autocomplete="username" required>
       <input name="pw" type="password" placeholder="Password${signup ? " (at least 6 characters)" : ""}" minlength="${signup ? 6 : 1}" autocomplete="${signup ? "new-password" : "current-password"}" required>
@@ -338,7 +336,7 @@
     if (!C.user) return loginForm(false);
     const ps = await C.profiles(), me = await C.me();
     acct.innerHTML = `<div class="card glass add-card"><h2>${esc(me?.display_name || C.user.email)}</h2><p class="muted">${esc(C.user.email)}</p>
-      <h4>Libraries</h4><ul class="ab-res libs">${ps.map((p) => `<li data-lib="${esc(p.slug)}" class="${p.slug === ctx.slug ? "on" : ""}"><span><b>${esc(p.display_name)}'s Library</b><small>${p.id === me?.id ? "yours" : p.is_public ? "public" : "private"}</small></span></li>`).join("") || `<li class="muted">No libraries yet: run supabase/schema.sql and add profiles</li>`}</ul>
+      <h4>Libraries</h4><ul class="ab-res libs">${ps.map((p) => `<li data-lib="${esc(p.slug)}" class="${p.slug === ctx.slug ? "on" : ""}"><span><b>${esc(p.display_name)}'s ${K.lib}</b><small>${p.id === me?.id ? "yours" : p.is_public ? "public" : "private"}</small></span></li>`).join("") || `<li class="muted">No libraries yet: run supabase/schema.sql and add profiles</li>`}</ul>
       ${me ? `<button class="ed-del req">Update my picks now</button>` : ""}
       ${me ? `<button class="ed-del vis">${me.is_public ? "Make my map private" : "Make my map public"}</button>` : ""}
       <button class="ed-del out">Sign out</button><button class="ab-close" aria-label="Close">✕</button></div>`;
