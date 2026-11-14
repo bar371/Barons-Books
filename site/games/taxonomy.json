@@ -1,0 +1,12 @@
+{
+ "_note": "Board-game categories: main group -> colour and sub-categories. Read by site/kind.js and scripts/cloud_sync.py. Broad on purpose so a small shelf forms a few real clusters.",
+ "groups": [
+  {"name": "Strategy", "color": "#74c0fc", "subs": ["Engine building", "Worker placement", "Area control", "Economic & trading"]},
+  {"name": "Cooperative", "color": "#63e6be", "subs": ["Co-op adventure", "Co-op puzzle"]},
+  {"name": "Party & Social", "color": "#f783ac", "subs": ["Party", "Social deduction", "Word & trivia"]},
+  {"name": "Family", "color": "#ffc078", "subs": ["Gateway", "Dexterity & light"]},
+  {"name": "Cards & Dice", "color": "#b197fc", "subs": ["Deck-building", "Card drafting", "Dice"]},
+  {"name": "Thematic", "color": "#ff8787", "subs": ["Fantasy adventure", "Dungeon crawl", "Campaign & legacy", "Sci-fi"]},
+  {"name": "Abstract & Puzzle", "color": "#a9e34b", "subs": ["Abstract", "Tile laying & puzzle"]}
+ ]
+}

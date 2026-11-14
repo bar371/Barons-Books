@@ -36,7 +36,7 @@
   const emptyBase = (d) => ({ ...d, books: [], recs: [], queue: [], genres: d.genres.map((g) => ({ ...g, count: 0 })), meta: { read: 0, queued: 0, recommended: 0 } });
   async function loadData() {
     // books start from data.json (Baron's Goodreads build); other kinds start from their empty category set
-    const get = K.base ? () => Promise.resolve(K.base()) : () => fetch("data.json", { cache: "no-cache" }).then((r) => r.json());
+    const get = K.base ? () => K.base() : () => fetch("data.json", { cache: "no-cache" }).then((r) => r.json());
     if (!window.Cloud) return get();
     const [c, base] = await Promise.all([window.Cloud.resolve().catch(() => ctx), get()]);
     ctx = c;
@@ -78,6 +78,7 @@
       const p = pb[it.id]; if (!p) continue;
       if (!(it.genres || []).length && p.genres) it.genres = p.genres.filter((g) => ids.has(g));
       if (!it.blurb && p.blurb) it.blurb = p.blurb;
+      for (const f of ["author", "year", "players", "playtime", "weight", "bggId", "series"]) if (p[f] != null && (it[f] == null || it[f] === "")) it[f] = p[f];
       if (p.fit != null) it.fit = p.fit;
       it.pending = false;
     }

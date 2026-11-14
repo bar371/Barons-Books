@@ -143,20 +143,11 @@
       pending: "Added by you · Claude fills in the details & picks on the next update",
       signupBlurb: "Map your own games: add them, build categories, and get picks. You'll stay signed in on this device.",
     },
-    // Broad groups on purpose: a 20-game shelf spreads over a few clusters instead of 20 lonely ones.
-    // Empty categories stay hidden on the map.
-    genres: [
-      ["Strategy", "#74c0fc", ["Engine building", "Worker placement", "Area control", "Economic & trading"]],
-      ["Cooperative", "#63e6be", ["Co-op adventure", "Co-op puzzle"]],
-      ["Party & Social", "#f783ac", ["Party", "Social deduction", "Word & trivia"]],
-      ["Family", "#ffc078", ["Gateway", "Dexterity & light"]],
-      ["Cards & Dice", "#b197fc", ["Deck-building", "Card drafting", "Dice"]],
-      ["Thematic", "#ff8787", ["Fantasy adventure", "Dungeon crawl", "Campaign & legacy", "Sci-fi"]],
-      ["Abstract & Puzzle", "#a9e34b", ["Abstract", "Tile laying & puzzle"]],
-    ],
-    base() {
-      const genres = [];
-      for (const [name, color, subs] of this.genres) {
+    // Categories live in games/taxonomy.json (the picks routine reads the same file). Broad on purpose: a 20-game
+    // shelf spreads over a few clusters instead of 20 lonely ones. Empty categories stay hidden on the map.
+    async base() {
+      const t = await fetch("games/taxonomy.json", { cache: "no-cache" }).then((r) => r.json()), genres = [];
+      for (const { name, color, subs } of t.groups) {
         genres.push({ id: name, name, parent: null, color, count: 0 });
         for (const s of subs) genres.push({ id: s, name: s, parent: name, color, count: 0 });
       }

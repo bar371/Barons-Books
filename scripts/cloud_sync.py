@@ -1,8 +1,11 @@
 """Bridge between the Supabase libraries and the Claude picks routine (see ROUTINE.md).
 
-  python scripts/cloud_sync.py pull [--all]   who needs picks -> data/cloud/todo.json + data/cloud/<slug>.json
-  python scripts/cloud_sync.py push <slug>    validate data/cloud/<slug>.picks.json, add covers, save to Supabase
-  python scripts/cloud_sync.py fail <slug>    mark that person's running request as failed
+  python scripts/cloud_sync.py pull [--all]          who needs picks -> data/cloud/todo.json + one snapshot per library
+  python scripts/cloud_sync.py push <slug> [--games] validate the picks file, add covers, save to Supabase
+  python scripts/cloud_sync.py fail <slug> [--games] mark that person's running request as failed
+
+Two kinds of library: books (snapshot data/cloud/<slug>.json, picks <slug>.picks.json) and board games
+(<slug>.games.json, picks <slug>.games.picks.json). Each todo entry says which kind and which files.
 
 Needs the Supabase *secret* key: either in the SUPABASE_SECRET_KEY environment variable, or attached by the
 cloud environment's network proxy to requests for the Supabase host. Never commit it.
@@ -22,6 +25,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 URL = "https://vimynskvwneemuqplujf.supabase.co"
 OUT = ROOT / "data" / "cloud"
+# per kind: Supabase tables and the file-name part (books keep their original names)
+KINDS = {"books": {"edits": "edits", "picks": "picks", "ext": ""},
+         "games": {"edits": "game_edits", "picks": "game_picks", "ext": ".games"}}
+GAME_FIELDS = ("author", "year", "players", "playtime", "weight", "series")  # details Claude may fill in for a game
 
 
 def api(path, method="GET", body=None, prefer=None):
@@ -54,8 +61,10 @@ def when(s):
     return datetime.fromisoformat(s.replace("Z", "+00:00")) if s else None
 
 
-def base_library(slug):
-    """The built part of a library: Baron's comes from the Goodreads export, others start empty."""
+def base_library(slug, kind="books"):
+    """The built part of a library: Baron's books come from the Goodreads export, everything else starts empty."""
+    if kind != "books":
+        return {"books": [], "queue": [], "recs": []}
     if slug != "baron":
         p = ROOT / "site" / "libraries" / f"{slug}.json"
         return json.loads(p.read_text("utf8")) if p.exists() else {"books": [], "queue": [], "recs": []}
@@ -65,9 +74,13 @@ def base_library(slug):
     return json.loads(p.read_text("utf8"))
 
 
-def taxonomy(ov, pk):
-    cur = json.loads((ROOT / "data" / "curation.json").read_text("utf8"))
-    tree = {m: list(s) for m, s in cur["genres"].items()}
+def taxonomy(ov, pk, kind="books"):
+    if kind == "games":
+        t = json.loads((ROOT / "site" / "games" / "taxonomy.json").read_text("utf8"))
+        tree = {g["name"]: list(g["subs"]) for g in t["groups"]}
+    else:
+        cur = json.loads((ROOT / "data" / "curation.json").read_text("utf8"))
+        tree = {m: list(s) for m, s in cur["genres"].items()}
     names = {s for subs in tree.values() for s in subs}
     for g in (pk.get("newGenres") or []) + (ov.get("genres") or []):
         if not g.get("parent"):
@@ -78,9 +91,9 @@ def taxonomy(ov, pk):
     return tree
 
 
-def snapshot(prof, ov, pk):
+def snapshot(prof, ov, pk, kind="books"):
     """Mirror of site/edit.js apply(): the library exactly as its owner sees it."""
-    d = base_library(prof["slug"])
+    d = base_library(prof["slug"], kind)
     books, queue = list(d.get("books", [])), list(d.get("queue", []))
     gone = {b.get("replaces") for b in ov.get("books", []) if b.get("replaces")}
     books = [b for b in books if b["id"] not in gone]
@@ -103,20 +116,28 @@ def snapshot(prof, ov, pk):
             b["genres"] = p["genres"]
         if p.get("fit") is not None:
             b["fit"] = p["fit"]
-    row = lambda b, *extra: {k: b.get(k) for k in ("id", "title", "author", "genres", "series", *extra) if b.get(k) not in (None, [], "")}
+        if kind == "games":
+            for f in GAME_FIELDS:
+                if p.get(f) not in (None, "") and b.get(f) in (None, ""):
+                    b[f] = p[f]
+    more = ("players", "playtime") if kind == "games" else ()
+    row = lambda b, *extra: {k: b.get(k) for k in ("id", "title", "author", "genres", "series", *more, *extra) if b.get(k) not in (None, [], "")}
     reading = [b for b in queue if b.get("shelf") == "reading"]
     to_read = [b for b in queue if b.get("shelf") != "reading"]
-    return {
-        "slug": prof["slug"], "name": prof["display_name"],
-        "taxonomy": taxonomy(ov, pk),
+    snap = {
+        "slug": prof["slug"], "name": prof["display_name"], "kind": kind,
+        "taxonomy": taxonomy(ov, pk, kind),
         "read": [row(b, "rating", "year") for b in books],
-        "reading": [row(b) for b in reading],
-        "toRead": [row(b) for b in to_read],
+        "reading": [row(b, *(("year",) if kind == "games" else ())) for b in reading],
+        "toRead": [row(b, *(("year",) if kind == "games" else ())) for b in to_read],
         "needGenres": [b["id"] for b in allb if not b.get("genres")],
         "needFit": [b["id"] for b in to_read if b.get("fit") is None and not (b.get("parts") or {}).get("taste")],
         "fixedRecs": [f'{r["title"]} — {r["author"]}' for r in d.get("recs", [])],  # Baron's hand-curated list
         "currentPicks": {k: pk.get(k) for k in ("newGenres", "books", "recs") if pk.get(k)},
     }
+    if kind == "games":  # games added by name (or with thin Wikidata entries) need their details filled in
+        snap["needDetails"] = [b["id"] for b in allb if any(b.get(f) in (None, "", []) for f in ("author", "year", "players", "playtime"))]
+    return snap
 
 
 def pull(everyone):
@@ -125,26 +146,37 @@ def pull(everyone):
     if not approved:
         sys.exit("No approved users visible: the Supabase secret key is not reaching Supabase (see ROUTINE.md).")
     profiles = {p["id"]: p for p in api("/profiles?select=id,slug,display_name,is_public")}
-    edits = {e["user_id"]: e for e in api("/edits?select=user_id,data,updated_at")}
-    picks = {p["user_id"]: p for p in api("/picks?select=user_id,data,updated_at")}
-    queued = api("/refresh_requests?status=eq.queued&select=id,user_id")
+    queued = api("/refresh_requests?status=eq.queued&select=id,user_id,kind")
     todo = []
-    for uid in approved:
-        prof = profiles.get(uid)
-        if not prof:
-            continue
-        asked = [q["id"] for q in queued if q["user_id"] == uid]
-        e, pk = edits.get(uid) or {}, picks.get(uid)
-        changed = not pk or (e.get("updated_at") and when(e["updated_at"]) > when(pk["updated_at"]))
-        if not (everyone or asked or changed):
-            continue
-        snap = snapshot(prof, e.get("data") or {}, (pk or {}).get("data") or {})
-        (OUT / f'{prof["slug"]}.json').write_text(json.dumps(snap, ensure_ascii=False, indent=1), "utf8")
-        todo.append({"slug": prof["slug"], "name": prof["display_name"], "requested": bool(asked),
-                     "read": len(snap["read"]), "needGenres": len(snap["needGenres"]), "needFit": len(snap["needFit"]),
-                     "currentRecs": len(snap["currentPicks"].get("recs") or [])})
-        if asked:
-            api(f"/refresh_requests?id=in.({','.join(map(str, asked))})", "PATCH", {"status": "running"}, "return=minimal")
+    for kind, T in KINDS.items():
+        edits = {e["user_id"]: e for e in api(f'/{T["edits"]}?select=user_id,data,updated_at')}
+        picks = {p["user_id"]: p for p in api(f'/{T["picks"]}?select=user_id,data,updated_at')}
+        for uid in approved:
+            prof = profiles.get(uid)
+            if not prof:
+                continue
+            asked = [q["id"] for q in queued if q["user_id"] == uid and (q.get("kind") or "books") == kind]
+            e, pk = edits.get(uid) or {}, picks.get(uid)
+            if kind != "books" and not (e.get("data") or {}).get("books"):
+                if asked:  # asked for game picks with an empty game shelf: nothing to base them on
+                    api(f"/refresh_requests?id=in.({','.join(map(str, asked))})", "PATCH", {"status": "done", "note": "empty library"}, "return=minimal")
+                continue
+            changed = not pk or (e.get("updated_at") and when(e["updated_at"]) > when(pk["updated_at"]))
+            if not (everyone or asked or changed):
+                continue
+            snap = snapshot(prof, e.get("data") or {}, (pk or {}).get("data") or {}, kind)
+            snap_file = f'{prof["slug"]}{T["ext"]}.json'
+            (OUT / snap_file).write_text(json.dumps(snap, ensure_ascii=False, indent=1), "utf8")
+            item = {"slug": prof["slug"], "name": prof["display_name"], "kind": kind, "requested": bool(asked),
+                    "snapshot": f"data/cloud/{snap_file}", "write": f'data/cloud/{prof["slug"]}{T["ext"]}.picks.json',
+                    "push": f'python3 scripts/cloud_sync.py push {prof["slug"]}' + (" --games" if kind == "games" else ""),
+                    "read": len(snap["read"]), "needGenres": len(snap["needGenres"]), "needFit": len(snap["needFit"]),
+                    "currentRecs": len(snap["currentPicks"].get("recs") or [])}
+            if kind == "games":
+                item["needDetails"] = len(snap["needDetails"])
+            todo.append(item)
+            if asked:
+                api(f"/refresh_requests?id=in.({','.join(map(str, asked))})", "PATCH", {"status": "running"}, "return=minimal")
     (OUT / "todo.json").write_text(json.dumps(todo, indent=1), "utf8")
     print(json.dumps(todo, indent=1) if todo else "Nothing to do: no requests and no library changes since the last picks.")
 
@@ -162,6 +194,36 @@ def ol_cover(title, author):
     return None
 
 
+def wd_game(title):
+    """Wikipedia + Wikidata lookup for a board game (same source as the site's add dialog): photo, BGG id, players, time."""
+    ua = {"User-Agent": "library-picks/1.0 (board game map)"}
+    get = lambda u: json.loads(urllib.request.urlopen(urllib.request.Request(u, headers=ua), timeout=12).read())
+    try:
+        q = urllib.parse.urlencode({"format": "json", "action": "query", "list": "search", "srlimit": 1,
+                                    "srsearch": f'{title} hastemplate:"Infobox game"'})
+        hits = get(f"https://en.wikipedia.org/w/api.php?{q}")["query"]["search"]
+        if not hits or key(hits[0]["title"].replace(" (board game)", "")) != key(title):
+            return {}
+        q = urllib.parse.urlencode({"format": "json", "action": "query", "prop": "pageprops|pageimages", "piprop": "thumbnail",
+                                    "pithumbsize": 600, "ppprop": "wikibase_item", "titles": hits[0]["title"]})
+        page = next(iter(get(f"https://en.wikipedia.org/w/api.php?{q}")["query"]["pages"].values()))
+        qid = page.get("pageprops", {}).get("wikibase_item")
+        out = {"cover": (page.get("thumbnail") or {}).get("source")}
+        if qid:
+            c = get(f"https://www.wikidata.org/w/api.php?format=json&action=wbgetentities&props=claims&ids={qid}")["entities"][qid]["claims"]
+            v = lambda p: ((c.get(p) or [{}])[0].get("mainsnak", {}).get("datavalue") or {}).get("value")
+            amt = lambda p: round(float(v(p)["amount"])) if isinstance(v(p), dict) and v(p).get("amount") else None
+            if v("P18"):
+                out["cover"] = "https://commons.wikimedia.org/wiki/Special:FilePath/" + urllib.parse.quote(v("P18")) + "?width=600"
+            out["bggId"] = v("P2339")
+            lo, hi = amt("P1872"), amt("P1873")
+            out["players"] = [lo, hi or lo] if lo else None
+            out["playtime"] = amt("P2047")
+        return {k: x for k, x in out.items() if x}
+    except Exception:
+        return {}
+
+
 def uid_of(slug):
     rows = api(f"/profiles?slug=eq.{urllib.parse.quote(slug)}&select=id")
     if not rows:
@@ -169,9 +231,10 @@ def uid_of(slug):
     return rows[0]["id"]
 
 
-def push(slug):
-    snap = json.loads((OUT / f"{slug}.json").read_text("utf8"))
-    out = json.loads((OUT / f"{slug}.picks.json").read_text("utf8"))
+def push(slug, kind="books"):
+    T = KINDS[kind]
+    snap = json.loads((OUT / f'{slug}{T["ext"]}.json').read_text("utf8"))
+    out = json.loads((OUT / f'{slug}{T["ext"]}.picks.json').read_text("utf8"))
     tree = snap["taxonomy"]
     new = []
     for g in out.get("newGenres") or []:
@@ -195,6 +258,8 @@ def push(slug):
         e = {"genres": gs} if gs else {}
         if b.get("blurb"): e["blurb"] = str(b["blurb"])[:300]
         if isinstance(b.get("fit"), (int, float)): e["fit"] = max(0, min(100, int(b["fit"])))
+        if kind == "games":
+            e.update(game_details(b))
         if e: books[i] = {**books.get(i, {}), **e}
     owned = {key(b["title"]) for b in snap["read"] + snap["reading"] + snap["toRead"]}
     fixed = {key(t.split(" — ")[0]) for t in snap["fixedRecs"]}
@@ -210,33 +275,58 @@ def push(slug):
             warn.append(f"rec {r.get('title')}: {why}"); continue
         seen.add(k)
         prev = next((x for x in snap["currentPicks"].get("recs") or [] if key(x["title"]) == k), {})
-        recs.append({"id": prev.get("id") or "pk-" + re.sub(r"[^a-z0-9]+", "-", k).strip("-")[:60],
-                     "title": r["title"], "author": r["author"], "year": r.get("year"), "genres": gs, "because": because,
-                     "reason": r.get("reason"), "fit": max(0, min(100, int(r.get("fit", 70)))),
-                     "cover": prev.get("cover") or r.get("cover") or ol_cover(r["title"], r["author"])})
+        rec = {"id": prev.get("id") or "pk-" + re.sub(r"[^a-z0-9]+", "-", k).strip("-")[:60],
+               "title": r["title"], "author": r["author"], "year": r.get("year"), "genres": gs, "because": because,
+               "reason": r.get("reason"), "fit": max(0, min(100, int(r.get("fit", 70))))}
+        if kind == "games":
+            rec.update(game_details(r))
+            look = {} if prev.get("cover") and prev.get("bggId") else wd_game(r["title"])
+            rec["cover"] = prev.get("cover") or look.get("cover")
+            rec["bggId"] = prev.get("bggId") or look.get("bggId")
+            for f in ("players", "playtime"):
+                rec[f] = rec.get(f) or look.get(f)
+        else:
+            rec["cover"] = prev.get("cover") or r.get("cover") or ol_cover(r["title"], r["author"])
+        recs.append(rec)
     data = {"updated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "newGenres": new, "books": books, "recs": recs}
     uid = uid_of(slug)
-    api("/picks?on_conflict=user_id", "POST", {"user_id": uid, "data": data, "updated_at": data["updated"]},
+    api(f'/{T["picks"]}?on_conflict=user_id', "POST", {"user_id": uid, "data": data, "updated_at": data["updated"]},
         "resolution=merge-duplicates,return=minimal")
-    api(f"/refresh_requests?user_id=eq.{uid}&status=eq.running", "PATCH", {"status": "done"}, "return=minimal")
-    print(f"{slug}: saved {len(recs)} picks ({sum(1 for r in recs if r['cover'])} with covers), "
-          f"{len(books)} book notes, {len(new)} new genres")
+    api(f"/refresh_requests?user_id=eq.{uid}&kind=eq.{kind}&status=eq.running", "PATCH", {"status": "done"}, "return=minimal")
+    print(f"{slug} ({kind}): saved {len(recs)} picks ({sum(1 for r in recs if r.get('cover'))} with pictures), "
+          f"{len(books)} {'game' if kind == 'games' else 'book'} notes, {len(new)} new {'categories' if kind == 'games' else 'genres'}")
     for w in warn:
         print("  skipped " + w)
 
 
-def fail(slug):
-    api(f"/refresh_requests?user_id=eq.{uid_of(slug)}&status=eq.running", "PATCH", {"status": "failed"}, "return=minimal")
-    print(f"{slug}: marked failed")
+def game_details(b):
+    """Designer / year / players / play time / weight / family Claude gives for a game, sanity-checked."""
+    e = {}
+    if isinstance(b.get("author"), str) and b["author"].strip(): e["author"] = b["author"].strip()[:80]
+    if isinstance(b.get("series"), str) and b["series"].strip(): e["series"] = b["series"].strip()[:80]
+    if isinstance(b.get("year"), int) and 1800 <= b["year"] <= 2100: e["year"] = b["year"]
+    p = b.get("players")
+    if isinstance(p, list) and p and all(isinstance(x, int) and 1 <= x <= 100 for x in p[:2]):
+        e["players"] = [p[0], p[1] if len(p) > 1 else p[0]]
+    if isinstance(b.get("playtime"), (int, float)) and 1 <= b["playtime"] <= 2000: e["playtime"] = int(b["playtime"])
+    if isinstance(b.get("weight"), (int, float)) and 1 <= b["weight"] <= 5: e["weight"] = round(float(b["weight"]), 1)
+    return e
+
+
+def fail(slug, kind="books"):
+    api(f"/refresh_requests?user_id=eq.{uid_of(slug)}&kind=eq.{kind}&status=eq.running", "PATCH", {"status": "failed"}, "return=minimal")
+    print(f"{slug} ({kind}): marked failed")
 
 
 if __name__ == "__main__":
     a = sys.argv[1:]
+    kind = "games" if "--games" in a else "books"
+    a = [x for x in a if x != "--games"]
     if a[:1] == ["pull"]:
         pull("--all" in a)
     elif a[:1] == ["push"] and len(a) == 2:
-        push(a[1])
+        push(a[1], kind)
     elif a[:1] == ["fail"] and len(a) == 2:
-        fail(a[1])
+        fail(a[1], kind)
     else:
         sys.exit(__doc__)

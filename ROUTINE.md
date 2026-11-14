@@ -1,6 +1,8 @@
 # Claude picks routine
 
-You are refreshing book recommendations ("picks") for the reading maps at https://bar371.github.io/Barons-Books/.
+You are refreshing recommendations ("picks") for the maps at https://bar371.github.io/Barons-Books/. Each person can have
+two libraries: **books** and **board games** (`?kind=games`). Each todo entry has a `kind`; follow section 2 for books
+and section 2b for games.
 Each person's library lives in Supabase. Your output goes back to Supabase through `scripts/cloud_sync.py`.
 **Do not commit, push or open pull requests**: nothing in git changes during this routine.
 
@@ -9,7 +11,8 @@ Each person's library lives in Supabase. Your output goes back to Supabase throu
 - If this run started from the app (a payload saying an update was requested), run `python3 scripts/cloud_sync.py pull`.
 - Otherwise (the monthly schedule), run `python3 scripts/cloud_sync.py pull --all`.
 
-It prints a todo list and writes `data/cloud/<slug>.json` for each person on it. If it says "Nothing to do", stop.
+It prints a todo list and writes a snapshot for each library on it. Every entry tells you its `snapshot` file to read,
+the `write` file to create, and the exact `push` command. If it says "Nothing to do", stop.
 If it fails with "secret key is not reaching Supabase", stop and report that. Don't try to work around it.
 
 ## 2. For each person on the list, write `data/cloud/<slug>.picks.json`
@@ -59,16 +62,50 @@ For every id in `needFit`, give `fit`: 0 to 100, how well that to-read book suit
 - **`fit`:** your honest taste-match estimate, not a constant. The site combines it with their ratings to rank picks.
 - **Ratings matter:** a 1 or 2 star book is a signal *against* its kind of book.
 
+## 2b. Board-game libraries (`"kind": "games"`)
+
+Read the entry's `snapshot` (`data/cloud/<slug>.games.json`). It has the same shape as a book snapshot, where:
+
+- `read` means games they **own** (with `rating`), `reading` means **on the table** (played a lot right now), and `toRead` means the **wishlist**.
+- `author` is the **designer**.
+- `taxonomy` holds board-game **categories**.
+- `needDetails` lists games missing a designer, year, player count or play time.
+
+Write `data/cloud/<slug>.games.picks.json` in the same format as section 2, with these additions.
+
+**Entries in `books`.** Each can also carry:
+
+- `author` (the designer, e.g. "Uwe Rosenberg"; several designers joined with " & ")
+- `year`
+- `players` as `[min, max]`
+- `playtime` in minutes
+- `weight` (BoardGameGeek-style complexity, 1.0 to 5.0)
+- `series` (the game's family, e.g. "Catan")
+
+For each id in `needDetails`, fill in what you know reliably and leave out what you don't. A game the person added by
+name may be obscure or homemade: never invent its details, just give categories.
+
+**`recs`.** Use real, published board games only. Each rec takes `title`, `author` (designer), `year`, `genres`
+(categories), `because` (ids from `read`), `reason` and `fit`, plus `players` and `playtime` when you know them.
+
+**Size and focus.** Aim for about 2 picks per owned game, between 10 and 40 in all.
+
+- Look at what they rate highly: mechanisms, weight, player counts and themes.
+- Never repeat anything they own, have on the table or have on the wishlist. Expansions of games they own are welcome when they're notable.
+- Low ratings are signals against that style of game.
+
+The push command looks up each pick on Wikipedia and Wikidata for a picture and BoardGameGeek link.
+
 ## 3. Save
 
-Run `python3 scripts/cloud_sync.py push <slug>` for each person. It validates the file, finds covers on Open Library and saves.
+Run each entry's `push` command: `python3 scripts/cloud_sync.py push <slug>` for books, `... push <slug> --games` for games. It validates the file, finds covers on Open Library and saves.
 
 Read what it reports as skipped. If many picks were skipped, fix the file and push again.
 
-If you can't finish someone, run `python3 scripts/cloud_sync.py fail <slug>`.
+If you can't finish a library, run `python3 scripts/cloud_sync.py fail <slug>`, adding `--games` for a game library.
 
 ## 4. Catch late requests
 
 Run `python3 scripts/cloud_sync.py pull` once more, without `--all`. If anyone new appears, do steps 2 and 3 for them.
 
-Finish with a short summary: who got picks, how many, and anything skipped.
+Finish with a short summary: whose library (books or games) got picks, how many, and anything skipped.
