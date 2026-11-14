@@ -95,6 +95,7 @@
     const all = [...d.books, ...d.recs, ...(d.queue || [])];
     for (const [id, gs] of Object.entries(ov.assign)) { const it = all.find((x) => x.id === id); if (it) it.genres = gs.filter((g) => ids.has(g)); }
     for (const [id, r] of Object.entries(ov.ratings || {})) { const it = d.books.find((x) => x.id === id); if (it) it.rating = r || null; }
+    if (K.artFor) for (const it of [...d.books, ...d.recs, ...d.queue]) { const a = K.artFor(it); if (a !== undefined) it.cover = a || (K.isPhoto(it.cover) ? null : it.cover); } // games: official box art
     score(d);
     d.meta = { ...d.meta, read: d.books.length, queued: d.queue.length, recommended: d.recs.length }; // header counts include your edits & Claude's picks
   }
@@ -129,7 +130,12 @@
   let pristine = null;
   function reload() {
     const L = window.Library, d = structuredClone(pristine);
-    apply(d); Object.keys(L.data).forEach((k) => delete L.data[k]); Object.assign(L.data, d); L.rebuild();
+    apply(d); Object.keys(L.data).forEach((k) => delete L.data[k]); Object.assign(L.data, d); L.rebuild(); findArt(d);
+  }
+  // games: look up box art for anything still missing it, then swap the pictures in place (no re-layout)
+  function findArt(d) {
+    if (!K.fetchArt) return;
+    setTimeout(() => K.fetchArt([...d.books, ...d.recs, ...(d.queue || [])]).then((m) => { if (Object.keys(m).length) window.Library.setCovers(m); }).catch(() => {}), 300);
   }
 
   // ---------- helpers ----------
@@ -382,5 +388,5 @@
     if (rq) rq.onclick = async () => { try { await C.requestRefresh(); rq.textContent = "Requested: Claude picks it up on the next run"; } catch (x) { rq.textContent = /duplicate|unique|409/i.test(x.message) ? "Already requested" : /row-level|policy|403/i.test(x.message) ? "Picks from Claude are invite-only for now: ask Baron" : "Couldn't request: " + x.message; } rq.disabled = true; };
   }
 
-  window.LibraryEdits = { loadData, apply(d) { pristine = structuredClone(d); apply(d); mountDock(); mountAccount(); }, panelExtra, rateHTML, legendExtra, get editing() { return editing; }, get canAdd() { return canEdit(); }, openAdd };
+  window.LibraryEdits = { loadData, apply(d) { pristine = structuredClone(d); apply(d); mountDock(); mountAccount(); findArt(d); }, panelExtra, rateHTML, legendExtra, get editing() { return editing; }, get canAdd() { return canEdit(); }, openAdd };
 })();

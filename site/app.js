@@ -768,7 +768,12 @@ function rebuild() {
   $("#brand-sub").textContent = K.sub(data.meta);
   renderLegend(); renderPanel(); applyLayout(fresh > 15 ? 0.8 : 0.55); // a small edit only needs a gentler nudge
 }
-window.Library = { get data() { return data; }, rebuild, select: (id) => select(byId.get(id) || null), node: (id) => byId.get(id), refreshPanel: () => renderPanel(), refreshLegend: () => renderLegend() };
+// swap pictures in without rebuilding the map (games' box art arrives after the first draw)
+function setCovers(m) {
+  for (const [id, url] of Object.entries(m)) { const n = byId.get(id); if (!n) continue; n.cover = url || (K.isPhoto?.(n.cover) ? null : n.cover); imgs.delete(id); }
+  if (selected) renderPanel();
+}
+window.Library = { get data() { return data; }, rebuild, setCovers, select: (id) => select(byId.get(id) || null), node: (id) => byId.get(id), refreshPanel: () => renderPanel(), refreshLegend: () => renderLegend() };
 
 /* ---------- dock + keyboard ---------- */
 function setQueue(v) { showQueue = v; $("#t-queue").checked = v; if (!v && selected?.kind === "queue") select(null); applyLayout(0.7); }

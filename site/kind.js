@@ -91,6 +91,62 @@
   const minutes = (c) => { const v = val(c, "P2047"); if (!v?.amount) return null; const a = +v.amount; return Math.round(/Q25235$/.test(v.unit) ? a * 60 : a); };
   const yearOf = (c) => { const v = val(c, "P577") || val(c, "P571"); const y = v?.time && parseInt(v.time.slice(1, 5)); return y || null; };
   const commons = (f, w) => f ? `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(f)}?width=${w}` : null;
+
+  // ---------- box art ----------
+  // Official box covers come from the game's English Wikipedia article (the infobox image, which Wikipedia hosts
+  // itself under fair use at low resolution: pilicense=any). Wikidata/Commons pictures are mostly photos of people
+  // playing, so those are only used when the file is clearly a box, cover or logo. Results are cached per browser.
+  const WP = "https://en.wikipedia.org/w/api.php?format=json&origin=*&action=query";
+  const gkey = (s) => String(s || "").toLowerCase().replace(/\s*\((board |card )?game\)$/, "").replace(/[^a-z0-9]/g, "");
+  const isPhoto = (u) => /commons\.wikimedia\.org\/wiki\/Special:FilePath|\/wikipedia\/commons\//.test(u || "");
+  const goodArt = (src, name) => src && (/\/wikipedia\/en\//.test(src) || /box|cover|logo/i.test(name || "")) ? src.replace(/\?utm_.*$/, "") : null;
+  const ARTKEY = "bl-art-v1";
+  let artCache = {}; try { artCache = JSON.parse(localStorage.getItem(ARTKEY) || "{}"); } catch {}
+  const artKey = (it) => it.bggId ? "b" + it.bggId : /^Q\d+$/.test(it.wikidata || "") ? "q" + it.wikidata : "t" + gkey(it.title);
+  const needsArt = (it) => !it.cover || isPhoto(it.cover);
+  async function fetchArt(items) {
+    const todo = items.filter((it) => needsArt(it) && !(artKey(it) in artCache)).slice(0, 80);
+    if (!todo.length) return {};
+    const wiki = new Map(); let failed = false; // artKey -> Wikipedia article title
+    const j = (u) => fetch(u).then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); });
+    const ids = todo.filter((i) => i.bggId || /^Q\d+$/.test(i.wikidata || ""));
+    if (ids.length) { // Wikidata knows the Wikipedia article for a BGG id / Wikidata item
+      const b = ids.filter((i) => i.bggId).map((i) => `"${String(i.bggId).replace(/\D/g, "")}"`).join(" ");
+      const q = ids.filter((i) => !i.bggId).map((i) => "wd:" + i.wikidata).join(" ");
+      const parts = [b && `{ VALUES ?bgg { ${b} } ?item wdt:P2339 ?bgg . }`, q && `{ VALUES ?item { ${q} } }`].filter(Boolean);
+      const sparql = `SELECT ?item ?bgg ?title WHERE { ${parts.join(" UNION ")} ?a schema:about ?item ; schema:isPartOf <https://en.wikipedia.org/> ; schema:name ?title . }`;
+      try {
+        for (const r of (await j("https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(sparql))).results.bindings) {
+          const qid = r.item.value.split("/").pop();
+          for (const it of ids) if ((it.bggId && String(it.bggId) === r.bgg?.value) || (!it.bggId && it.wikidata === qid)) wiki.set(artKey(it), r.title.value);
+        }
+      } catch { failed = true; }
+    }
+    for (const it of todo.filter((i) => !wiki.has(artKey(i)))) { // otherwise: search for a game article with that name
+      try {
+        const h = (await j(`${WP}&list=search&srlimit=1&srsearch=${encodeURIComponent(it.title + ' hastemplate:"Infobox game"')}`)).query?.search?.[0];
+        if (h && gkey(h.title) === gkey(it.title)) wiki.set(artKey(it), h.title);
+      } catch { failed = true; }
+    }
+    const titles = [...new Set(wiki.values())], art = {};
+    for (let i = 0; i < titles.length; i += 40) {
+      const batch = titles.slice(i, i + 40);
+      try {
+        const w = (await j(`${WP}&prop=pageimages&piprop=thumbnail|name&pithumbsize=500&pilicense=any&redirects=1&titles=${encodeURIComponent(batch.join("|"))}`)).query || {};
+        const to = new Map([...(w.normalized || []), ...(w.redirects || [])].map((x) => [x.from, x.to])), got = {};
+        for (const p of Object.values(w.pages || {})) got[p.title] = goodArt(p.thumbnail?.source, p.pageimage);
+        for (const t of batch) { let f = t; for (let n = 0; n < 3 && to.has(f); n++) f = to.get(f); art[t] = got[f] ?? null; }
+      } catch { failed = true; }
+    }
+    const out = {};
+    for (const it of todo) {
+      const k = artKey(it), t = wiki.get(k);
+      if (t ? !(t in art) : failed) continue; // lookup didn't finish: try again next visit
+      artCache[k] = t ? art[t] : null; out[it.id] = artCache[k];
+    }
+    try { localStorage.setItem(ARTKEY, JSON.stringify(artCache)); } catch {}
+    return out;
+  }
   const players = (n) => n.players ? (n.players[0] === n.players[1] || !n.players[1] ? `${n.players[0]} players` : `${n.players[0]}–${n.players[1]} players`) : null;
   const gslug = (s) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
@@ -154,7 +210,7 @@
       return { genres, books: [], recs: [], queue: [], meta: { read: 0, queued: 0, recommended: 0 } };
     },
     async find(s, signal) {
-      const w = await fetch(`https://en.wikipedia.org/w/api.php?format=json&origin=*&action=query&generator=search&gsrlimit=8&gsrsearch=${encodeURIComponent(s + ' hastemplate:"Infobox game"')}&prop=pageimages|description|pageprops&piprop=thumbnail&pithumbsize=400&ppprop=wikibase_item`, { signal }).then((r) => r.json());
+      const w = await fetch(`https://en.wikipedia.org/w/api.php?format=json&origin=*&action=query&generator=search&gsrlimit=8&gsrsearch=${encodeURIComponent(s + ' hastemplate:"Infobox game"')}&prop=pageimages|description|pageprops&piprop=thumbnail|name&pithumbsize=500&pilicense=any&ppprop=wikibase_item`, { signal }).then((r) => r.json());
       const pages = Object.values(w.query?.pages || {}).sort((a, b) => a.index - b.index);
       const qids = pages.map((p) => p.pageprops?.wikibase_item).filter(Boolean);
       let ents = {}, names = {};
@@ -170,7 +226,7 @@
         const q = p.pageprops?.wikibase_item, c = ents[q]?.claims, year = yearOf(c);
         const designers = designerIds(c).map((x) => names[x]).filter(Boolean), series = ids(c, "P179").map((x) => names[x]).filter(Boolean)[0] || null;
         const lo = num(c, "P1872"), hi = num(c, "P1873"), img = val(c, "P18");
-        const thumb = commons(img, 120) || p.thumbnail?.source || null, big = commons(img, 600) || p.thumbnail?.source || null;
+        const box = goodArt(p.thumbnail?.source, p.pageimage) || (/box|cover/i.test(img || "") ? commons(img, 500) : null), thumb = box, big = box;
         return { key: q || "wp-" + p.pageid, title: p.title.replace(/ \((board |card )?game\)$/, ""), creator: designers.join(" & "),
           small: [designers.join(", ") || p.description, year].filter(Boolean).join(" · "), thumb, big,
           make: () => ({ id: q ? "wd-" + q : "g-" + gslug(p.title), wikidata: q || null, title: p.title.replace(/ \((board |card )?game\)$/, ""),
@@ -183,6 +239,9 @@
       return out;
     },
     // BoardGameGeek collection export (Collection page -> Export, CSV). Read in the browser; nothing is uploaded.
+    // box art for games without one (filled in after the map shows; see fetchArt above)
+    artFor: (it) => needsArt(it) ? artCache[artKey(it)] : undefined,
+    isPhoto, fetchArt,
     importLabel: "Have a BoardGameGeek collection? Import its CSV export",
     async importCSV(text) {
       const rows = d3.csvParse(text.replace(/^\uFEFF/, ""));
@@ -206,13 +265,12 @@
       // designers + a photo from Wikidata, matched by BGG id (one query; best effort)
       try {
         const vals = items.map((i) => `"${i.bggId.replace(/\D/g, "")}"`).join(" ");
-        const q = `SELECT ?bgg ?img (GROUP_CONCAT(DISTINCT ?dl; separator=" & ") AS ?designers) WHERE { VALUES ?bgg { ${vals} } ?item wdt:P2339 ?bgg .
-          OPTIONAL { ?item wdt:P18 ?img } OPTIONAL { ?item wdt:P287|wdt:P50|wdt:P170 ?d . ?d rdfs:label ?dl FILTER(lang(?dl)="en") } } GROUP BY ?bgg ?img`;
+        const q = `SELECT ?bgg (GROUP_CONCAT(DISTINCT ?dl; separator=" & ") AS ?designers) WHERE { VALUES ?bgg { ${vals} } ?item wdt:P2339 ?bgg .
+          OPTIONAL { ?item wdt:P287|wdt:P50|wdt:P170 ?d . ?d rdfs:label ?dl FILTER(lang(?dl)="en") } } GROUP BY ?bgg`;
         const r = await fetch("https://query.wikidata.org/sparql?format=json&query=" + encodeURIComponent(q)).then((x) => x.json());
         for (const b of r.results.bindings) {
           const it = items.find((i) => i.bggId === b.bgg.value); if (!it) continue;
           if (b.designers?.value && !it.author) it.author = b.designers.value;
-          if (b.img?.value && !it.cover) it.cover = b.img.value.replace(/^http:/, "https:") + "?width=600";
         }
       } catch {}
       return items;

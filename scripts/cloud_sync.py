@@ -17,6 +17,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
@@ -196,31 +197,44 @@ def ol_cover(title, author):
 
 def wd_game(title):
     """Wikipedia + Wikidata lookup for a board game (same source as the site's add dialog): photo, BGG id, players, time."""
-    ua = {"User-Agent": "library-picks/1.0 (board game map)"}
-    get = lambda u: json.loads(urllib.request.urlopen(urllib.request.Request(u, headers=ua), timeout=12).read())
+    ua = {"User-Agent": "library-picks/1.0 (https://github.com/bar371/Barons-Books)"}
+
+    def get(u):  # Wikimedia rate-limits bursts (HTTP 429): go gently and retry
+        for wait in (1, 4, 10):
+            time.sleep(wait)
+            try:
+                return json.loads(urllib.request.urlopen(urllib.request.Request(u, headers=ua), timeout=12).read())
+            except urllib.error.HTTPError as e:
+                if e.code != 429:
+                    raise
+        raise RuntimeError("rate-limited by Wikimedia")
     try:
         q = urllib.parse.urlencode({"format": "json", "action": "query", "list": "search", "srlimit": 1,
                                     "srsearch": f'{title} hastemplate:"Infobox game"'})
         hits = get(f"https://en.wikipedia.org/w/api.php?{q}")["query"]["search"]
         if not hits or key(hits[0]["title"].replace(" (board game)", "")) != key(title):
             return {}
-        q = urllib.parse.urlencode({"format": "json", "action": "query", "prop": "pageprops|pageimages", "piprop": "thumbnail",
-                                    "pithumbsize": 600, "ppprop": "wikibase_item", "titles": hits[0]["title"]})
+        # the article's infobox image is usually the official box cover (Wikipedia hosts it under fair use: pilicense=any)
+        q = urllib.parse.urlencode({"format": "json", "action": "query", "prop": "pageprops|pageimages", "piprop": "thumbnail|name",
+                                    "pithumbsize": 500, "pilicense": "any", "ppprop": "wikibase_item", "titles": hits[0]["title"]})
         page = next(iter(get(f"https://en.wikipedia.org/w/api.php?{q}")["query"]["pages"].values()))
         qid = page.get("pageprops", {}).get("wikibase_item")
-        out = {"cover": (page.get("thumbnail") or {}).get("source")}
+        src = (page.get("thumbnail") or {}).get("source") or ""
+        box = "/wikipedia/en/" in src or re.search(r"box|cover|logo", page.get("pageimage") or "", re.I)
+        out = {"cover": re.sub(r"\?utm_.*$", "", src) if src and box else None}
         if qid:
             c = get(f"https://www.wikidata.org/w/api.php?format=json&action=wbgetentities&props=claims&ids={qid}")["entities"][qid]["claims"]
             v = lambda p: ((c.get(p) or [{}])[0].get("mainsnak", {}).get("datavalue") or {}).get("value")
             amt = lambda p: round(float(v(p)["amount"])) if isinstance(v(p), dict) and v(p).get("amount") else None
-            if v("P18"):
-                out["cover"] = "https://commons.wikimedia.org/wiki/Special:FilePath/" + urllib.parse.quote(v("P18")) + "?width=600"
+            if not out["cover"] and v("P18") and re.search(r"box|cover", v("P18"), re.I):  # Commons pictures are mostly gameplay photos
+                out["cover"] = "https://commons.wikimedia.org/wiki/Special:FilePath/" + urllib.parse.quote(v("P18")) + "?width=500"
             out["bggId"] = v("P2339")
             lo, hi = amt("P1872"), amt("P1873")
             out["players"] = [lo, hi or lo] if lo else None
             out["playtime"] = amt("P2047")
         return {k: x for k, x in out.items() if x}
-    except Exception:
+    except Exception as e:
+        print(f"  (picture lookup for {title} failed: {e})", file=sys.stderr)
         return {}
 
 
