@@ -200,7 +200,7 @@ def wd_game(title):
     ua = {"User-Agent": "library-picks/1.0 (https://github.com/bar371/Barons-Books)"}
 
     def get(u):  # Wikimedia rate-limits bursts (HTTP 429): go gently and retry
-        for wait in (1, 4, 10):
+        for wait in (0.3, 3, 8):
             time.sleep(wait)
             try:
                 return json.loads(urllib.request.urlopen(urllib.request.Request(u, headers=ua), timeout=12).read())
@@ -247,6 +247,7 @@ def uid_of(slug):
 
 def push(slug, kind="books"):
     T = KINDS[kind]
+    t0 = time.monotonic()
     snap = json.loads((OUT / f'{slug}{T["ext"]}.json').read_text("utf8"))
     out = json.loads((OUT / f'{slug}{T["ext"]}.picks.json').read_text("utf8"))
     tree = snap["taxonomy"]
@@ -294,7 +295,9 @@ def push(slug, kind="books"):
                "reason": r.get("reason"), "fit": max(0, min(100, int(r.get("fit", 70))))}
         if kind == "games":
             rec.update(game_details(r))
-            look = {} if prev.get("cover") and prev.get("bggId") else wd_game(r["title"])
+            # picture lookups are best effort (the site also finds box covers itself): stop after ~2 minutes so the save always happens
+            late = time.monotonic() - t0 > 120
+            look = {} if late or (prev.get("cover") and prev.get("bggId")) else wd_game(r["title"])
             rec["cover"] = prev.get("cover") or look.get("cover")
             rec["bggId"] = prev.get("bggId") or look.get("bggId")
             for f in ("players", "playtime"):

@@ -99,6 +99,9 @@ The push command looks up each pick on Wikipedia and Wikidata for a picture and 
 ## 3. Save
 
 Run each entry's `push` command: `python3 scripts/cloud_sync.py push <slug>` for books, `... push <slug> --games` for games. It validates the file, finds covers on Open Library and saves.
+A push can take up to about 3 minutes (picture lookups). Run it in the foreground with a 10-minute Bash timeout
+(`timeout: 600000`), not in the background, and wait for its "saved N picks" line. Never finish the run while a push is still going:
+nothing is saved until it prints that line.
 
 Read what it reports as skipped. If many picks were skipped, fix the file and push again.
 
