@@ -95,7 +95,7 @@
     const all = [...d.books, ...d.recs, ...(d.queue || [])];
     for (const [id, gs] of Object.entries(ov.assign)) { const it = all.find((x) => x.id === id); if (it) it.genres = gs.filter((g) => ids.has(g)); }
     for (const [id, r] of Object.entries(ov.ratings || {})) { const it = d.books.find((x) => x.id === id); if (it) it.rating = r || null; }
-    if (K.artFor) for (const it of [...d.books, ...d.recs, ...d.queue]) { const a = K.artFor(it); if (a !== undefined) it.cover = a || (K.isPhoto(it.cover) ? null : it.cover); } // games: official box art
+    if (K.artFor) for (const it of [...d.books, ...d.recs, ...d.queue]) { const a = K.artFor(it); it.cover = a || (K.isPhoto(it.cover) ? null : it.cover); } // games: official box art, never a stand-in photo (a name tile until the cover arrives)
     score(d);
     d.meta = { ...d.meta, read: d.books.length, queued: d.queue.length, recommended: d.recs.length }; // header counts include your edits & Claude's picks
   }
