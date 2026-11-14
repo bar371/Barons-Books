@@ -260,7 +260,7 @@ function pick(sx, sy) {
     if (n.a < 0.2 || !visibleFor(n) || performance.now() < n.born) continue;
     const s = n.s * bornScale(n, performance.now());
     if (isItem(n)) {
-      const hw = 16 * n.sc * s, hh = 24 * n.sc * s;
+      const hw = K.box[0] / 2 * n.sc * s, hh = K.box[1] / 2 * n.sc * s;
       if (Math.abs(x - n.x) <= hw + 2 && Math.abs(y - n.y) <= hh + 2) return n;
     } else if (Math.hypot(x - n.x, y - n.y) <= n.rad * s) return n;
   }
@@ -442,7 +442,7 @@ function rankBadge(n, x, y, w, h) { // top-10 picks wear a numbered medal
 
 function drawBook(n, t, s) {
   const isRec = n.kind === "rec", isQ = n.kind === "queue", reading = isQ && n.shelf === "reading";
-  const w = 32 * n.sc * s, h = 48 * n.sc * s, x = n.x - w / 2, y = n.y - h / 2, k = T.k;
+  const w = K.box[0] * n.sc * s, h = K.box[1] * n.sc * s, x = n.x - w / 2, y = n.y - h / 2, k = T.k;
   const sx = n.x * k + T.x, sy = n.y * k + T.y, mg = h * k + 70;
   if (sx < -mg || sx > W + mg || sy < -mg || sy > H + mg) return; // off-screen: skip
   const lit = n === (hover || selected);
@@ -625,7 +625,7 @@ function overviewHTML() {
   const avg = rated.length ? d3.mean(rated, (b) => b.rating) : 0;
   const hist = d3.range(1, 6).map((r) => rated.filter((b) => b.rating === r).length), hmax = Math.max(1, ...hist);
   const yrs = d3.rollups(bs.filter((b) => b.dateRead), (v) => v.length, (b) => b.dateRead.slice(0, 4)).sort((a, b) => a[0] - b[0]).slice(-9), ymax = Math.max(1, ...yrs.map((y) => y[1]));
-  const au = d3.rollups(bs, (v) => v.length, (b) => b.author).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const au = d3.rollups(bs.filter((b) => b.author), (v) => v.length, (b) => b.author).sort((a, b) => b[1] - a[1]).slice(0, 5);
   return `<h2>Overview</h2><p class="by">${K.overviewBy}</p>
   <div class="tiles">
     <div class="tile"><b data-n="${bs.length}">0</b><span>${K.tileRead}</span></div>
@@ -668,7 +668,7 @@ function detailHTML(n) {
   else {
     const recs = nodes.filter((r) => r.kind === "rec" && r.because?.includes(n.id));
     if (recs.length) h += `<h4>Leads to</h4><div class="minis">${recs.map((r) => miniBtn(r, (showRecs ? "" : "(hidden) ") + r.author)).join("")}</div>`;
-    const sib = nodes.filter((b) => (b.kind === "book" || b.kind === "queue") && b !== n && ((b.series && b.series === n.series) || b.author === n.author)).slice(0, 5);
+    const sib = nodes.filter((b) => (b.kind === "book" || b.kind === "queue") && b !== n && ((b.series && b.series === n.series) || (n.author && b.author === n.author))).slice(0, 5);
     if (sib.length) h += `<h4>${K.siblings(!!n.series)}</h4><div class="minis">${sib.map((b) => miniBtn(b, b.series ? b.series + (b.seriesNo ? " #" + b.seriesNo : "") : b.author)).join("")}</div>`;
   }
   h += window.LibraryEdits?.panelExtra?.(n) || "";

@@ -35,12 +35,13 @@
   // ---------- which library, and its data ----------
   const emptyBase = (d) => ({ ...d, books: [], recs: [], queue: [], genres: d.genres.map((g) => ({ ...g, count: 0 })), meta: { read: 0, queued: 0, recommended: 0 } });
   async function loadData() {
-    const get = () => fetch("data.json", { cache: "no-cache" }).then((r) => r.json());
+    // books start from data.json (Baron's Goodreads build); other kinds start from their empty category set
+    const get = K.base ? () => Promise.resolve(K.base()) : () => fetch("data.json", { cache: "no-cache" }).then((r) => r.json());
     if (!window.Cloud) return get();
     const [c, base] = await Promise.all([window.Cloud.resolve().catch(() => ctx), get()]);
     ctx = c;
     let d = base;
-    if (ctx.slug !== "baron") d = await fetch(`libraries/${ctx.slug}.json`, { cache: "no-cache" }).then((r) => (r.ok ? r.json() : emptyBase(base))).catch(() => emptyBase(base));
+    if (!K.base && ctx.slug !== "baron") d = await fetch(`libraries/${ctx.slug}.json`, { cache: "no-cache" }).then((r) => (r.ok ? r.json() : emptyBase(base))).catch(() => emptyBase(base));
     if (ctx.profile) {
       const [remote, picks] = await Promise.all([window.Cloud.loadEdits(ctx.profile.id), window.Cloud.loadPicks(ctx.profile.id)]);
       pk = picks;
@@ -115,7 +116,7 @@
     const series = new Set(books.map((b) => b.series).filter(Boolean)), q = d.queue || [];
     for (const it of q) {
       if (it.shelf !== "to-read") { delete it.score; delete it.parts; delete it.rank; continue; }
-      const taste = it.fit ?? it.parts?.taste ?? 70, stars = books.filter((b) => b.author === it.author && b.rating).map((b) => b.rating);
+      const taste = it.fit ?? it.parts?.taste ?? 70, stars = it.author ? books.filter((b) => b.author === it.author && b.rating).map((b) => b.rating) : [];
       const author = stars.length ? pr(avg(stars) / 5 * 100) : 70, ser = it.series && series.has(it.series) ? 100 : 50;
       it.score = pr(0.6 * taste + 0.25 * author + 0.15 * ser);
       it.parts = { taste, author, series: ser, avgStars: stars.length ? pr(avg(stars) * 10) / 10 : null, nAuthor: stars.length };
@@ -136,10 +137,10 @@
   const subsOf = (m) => D().genres.filter((g) => g.parent === m);
   const slug = (s) => s.trim().replace(/\s+/g, " ");
   function genreSelect(cls) {
-    return `<select class="ed-sel ${cls}"><option value="">Add a genre…</option>${macros().map((m) => `<optgroup label="${esc(m.name)}">${subsOf(m.id).map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</optgroup>`).join("")}<option value="__new">＋ New genre…</option></select>`;
+    return `<select class="ed-sel ${cls}"><option value="">Add a ${E.genre}…</option>${macros().map((m) => `<optgroup label="${esc(m.name)}">${subsOf(m.id).map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`).join("")}</optgroup>`).join("")}<option value="__new">＋ New ${E.genre}…</option></select>`;
   }
   function newGenreForm() {
-    return `<div class="ed-new" hidden><input class="ed-gname" placeholder="Genre name" maxlength="40"><select class="ed-gparent">${macros().map((m) => `<option value="${esc(m.id)}">under ${esc(m.name)}</option>`).join("")}<option value="">as a new main genre</option></select><button class="ed-gadd">Add</button></div>`;
+    return `<div class="ed-new" hidden><input class="ed-gname" placeholder="${E.Genre} name" maxlength="40"><select class="ed-gparent">${macros().map((m) => `<option value="${esc(m.id)}">under ${esc(m.name)}</option>`).join("")}<option value="">as a new main ${E.genre}</option></select><button class="ed-gadd">Add</button></div>`;
   }
   function createGenre(name, parent) {
     name = slug(name); if (!name) return null;
@@ -156,8 +157,8 @@
   function panelExtra(n) {
     if (!editing) return n.mine && n.pending ? `<p class="ed-note">${E.pending}</p>` : n.picked ? `<p class="ed-note">✦ A fresh pick from Claude</p>` : "";
     const cur = n.genreIds || [];
-    return `<div class="ed-box" data-ed-book="${esc(n.id)}"><h4>Edit genres</h4>
-      <div class="chips">${cur.map((g) => `<span class="chip ed-chip">${esc(D().genres.find((x) => x.id === g)?.name || g)}<button data-ed-rm="${esc(g)}" aria-label="Remove">×</button></span>`).join("") || `<span class="muted">No genre yet</span>`}</div>
+    return `<div class="ed-box" data-ed-book="${esc(n.id)}"><h4>Edit ${E.genre === "genre" ? "genres" : "categories"}</h4>
+      <div class="chips">${cur.map((g) => `<span class="chip ed-chip">${esc(D().genres.find((x) => x.id === g)?.name || g)}<button data-ed-rm="${esc(g)}" aria-label="Remove">×</button></span>`).join("") || `<span class="muted">No ${E.genre} yet</span>`}</div>
       ${genreSelect("ed-pick")}${newGenreForm()}
       ${n.mine ? `<button class="ed-del">${E.removeOne}</button>` : ""}
       <p class="ed-note">${n.mine && n.pending ? E.pending : "Changes recluster the map straight away"}</p></div>`;
@@ -290,6 +291,7 @@
 
   // ---------- account: sign in, switch library, sign out ----------
   const go = (lib) => { const p = new URLSearchParams(location.search); p.delete("edit"); lib ? p.set("lib", lib) : p.delete("lib"); const q = p.toString(); location.href = location.pathname + (q ? "?" + q : ""); };
+  const goKind = (k) => { const p = new URLSearchParams(location.search); p.delete("edit"); p.delete("book"); k === "books" ? p.delete("kind") : p.set("kind", k); const q = p.toString(); location.href = location.pathname + (q ? "?" + q : ""); };
   function mountAccount() {
     const dock = document.querySelector(".dock"); if (!dock || document.querySelector("#b-acct")) return;
     const b = document.createElement("button"); b.id = "b-acct"; const u = window.Cloud?.user;
@@ -336,10 +338,12 @@
     if (!C.user) return loginForm(false);
     const ps = await C.profiles(), me = await C.me();
     acct.innerHTML = `<div class="card glass add-card"><h2>${esc(me?.display_name || C.user.email)}</h2><p class="muted">${esc(C.user.email)}</p>
+      <div class="kinds">${[["books", "📚 Books"], ["games", "🎲 Board games"]].map(([k, l]) => `<button data-kind="${k}" class="${K.id === k ? "on" : ""}">${l}</button>`).join("")}</div>
       <h4>Libraries</h4><ul class="ab-res libs">${ps.map((p) => `<li data-lib="${esc(p.slug)}" class="${p.slug === ctx.slug ? "on" : ""}"><span><b>${esc(p.display_name)}'s ${K.lib}</b><small>${p.id === me?.id ? "yours" : p.is_public ? "public" : "private"}</small></span></li>`).join("") || `<li class="muted">No libraries yet: run supabase/schema.sql and add profiles</li>`}</ul>
       ${me ? `<button class="ed-del req">Update my picks now</button>` : ""}
       ${me ? `<button class="ed-del vis">${me.is_public ? "Make my map private" : "Make my map public"}</button>` : ""}
       <button class="ed-del out">Sign out</button><button class="ab-close" aria-label="Close">✕</button></div>`;
+    acct.querySelector(".kinds").onclick = (e) => { const b = e.target.closest("[data-kind]"); if (b && b.dataset.kind !== K.id) goKind(b.dataset.kind); };
     acct.querySelector(".libs").onclick = (e) => { const li = e.target.closest("[data-lib]"); if (li) go(li.dataset.lib); };
     acct.querySelector(".out").onclick = async () => { await C.signOut(); go(null); };
     const vis = acct.querySelector(".vis");

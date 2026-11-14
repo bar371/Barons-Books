@@ -206,3 +206,9 @@ kbd{font:500 11px var(--ui);padding:1px 6px;border:1px solid var(--line);border-
 .modal .ab-stars button{margin-top:0;background:transparent}
 .modal .ab-stars button.on{color:#ffd43b}
 .copylink{display:block;width:100%;margin-top:8px;padding:8px;border-radius:11px;border:1px solid var(--line);background:transparent;color:var(--muted);font:inherit;font-size:13px;cursor:pointer} .copylink:hover{background:var(--line);color:var(--ink)}
+/* books / board games switch (account dialog) */
+.kinds{display:flex;gap:6px;margin:12px 0 2px} .kinds button{flex:1;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:transparent;color:var(--ink);font:inherit;cursor:pointer} .kinds button.on{background:color-mix(in srgb,var(--accent) 18%,transparent);border-color:var(--accent);font-weight:600}
+/* board games: square boxes instead of tall covers */
+[data-kind="games"] #results img,[data-kind="games"] #results .ph{height:28px} [data-kind="games"] .mini img,[data-kind="games"] .mini .ph{height:34px}
+[data-kind="games"] .ab-res img,[data-kind="games"] .ab-res .ph{height:30px} [data-kind="games"] .ab-many img,[data-kind="games"] .ab-many .ph{height:64px}
+[data-kind="games"] .cover{width:190px;aspect-ratio:1;border-radius:8px;transform:rotateY(-10deg)}
