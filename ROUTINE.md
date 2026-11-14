@@ -70,7 +70,7 @@ Read the entry's `snapshot` (`data/cloud/<slug>.games.json`). It has the same sh
 - `author` is the **designer**.
 - `taxonomy` holds board-game **categories**.
 - `needDetails` lists games missing a designer, year, player count or play time.
-- `needCover` and `recsNeedCover` list games and earlier picks never searched for a box picture (see "Box covers from the web" below).
+- `needCover` and `recsNeedCover` list games and earlier picks never searched for a box picture (the `covers` command below handles them).
 
 Write `data/cloud/<slug>.games.picks.json` in the same format as section 2, with these additions.
 
@@ -99,23 +99,22 @@ The push command looks up each pick on Wikipedia and Wikidata for a picture and 
 
 ### Box covers from the web (games only)
 
-**This step is required for every game library.** Wikipedia only has box art for famous games, so find the rest on the web.
-Do it for every id in the snapshot's `needCover` (library games never searched yet), every title in `recsNeedCover`
-(earlier picks never searched) and every new rec you add. Each game is searched only once: the final push remembers
-the ones you couldn't find, so later runs only handle new games.
+**Required for every game library, and there is no time limit: finish it.** Wikipedia only has box art for famous games,
+so the rest are found on the web, one small batch at a time. Each game is searched only once, ever: later runs only
+handle games that are new. Do it **after** the first push (the push tells you when it's needed):
 
-1. Use **WebSearch** to find the game's official page, e.g. `"Century Spice Road" board game Plan B Games`.
-   Prefer the **publisher's own site**. If that has nothing usable, a big shop's product page is fine.
+1. Run `python3 scripts/cloud_sync.py covers <slug>`. It prints the next batch of games (each with a `key`) and how many are left.
+2. For each game in the batch, use **WebSearch** to find its official page, e.g. `"Century: Spice Road" board game`.
+   Prefer the **publisher's own site**; if it has nothing usable, a big shop's product page is fine.
    **Never use boardgamegeek.com or geekdo images**: their terms only allow their art through their API.
-2. Run `python3 scripts/cloud_sync.py og <page-url> [<page-url> ...]` (several pages at once is fastest). For each page it
-   lists up to 5 candidate pictures that load, each saved under `data/cloud/covers/`.
-3. **Look at the saved files with Read** and pick the one that is the game's **box** (a flat cover or a 3D box shot).
-   Not a logo, a banner, a gameplay or components photo, a person, or a different game or edition.
-4. Put its `url` as `"cover"` on the entry: in `books[<id>]` for a library game, or on the rec itself.
-
-If you can't find a clear box picture for a game in a couple of tries, leave `cover` out; the site then shows a name tile.
-Work in batches (search several games, then one `og` call for all their pages) and spend at most about 15 minutes on covers
-in total. The push checks every cover loads and drops the ones that don't.
+3. Run `python3 scripts/cloud_sync.py og <page-url> [<page-url> ...]` for the batch's pages. It lists up to 5 candidate
+   pictures per page and saves each under `data/cloud/covers/`.
+4. **Look at the saved files with Read** and pick the game's **box** (a flat cover or a 3D box shot). Not a logo, a banner,
+   a gameplay or components photo, a person, or a different game or edition. If none fits, try one more page.
+5. Record each game:
+   - found: `python3 scripts/cloud_sync.py cover <slug> <key> <picture-url>`
+   - not found after checking 1 or 2 pages: `python3 scripts/cloud_sync.py cover <slug> <key> none <page-url> [<page-url> ...]`
+6. Run `covers` again for the next batch. **Repeat until it prints ALL DONE**, then run the push command again.
 
 ## 3. Save
 
@@ -126,10 +125,8 @@ nothing is saved until it prints that line.
 
 Read what it reports as skipped. If many picks were skipped, fix the file and push again.
 
-**Game libraries: the run isn't done until you've pushed with `--covers-done`.** If the push prints "NEXT STEP, required",
-do "Box covers from the web" for the games it lists, add the covers to the picks file, then run
-`python3 scripts/cloud_sync.py push <slug> --games --covers-done`. You can also do the cover search before the first push
-and go straight to `--covers-done`.
+**Game libraries: the run isn't done until the push prints "covers: all searched".** If it prints "NEXT STEP, required",
+do "Box covers from the web" until `covers` says ALL DONE, then push again.
 
 If you can't finish a library, run `python3 scripts/cloud_sync.py fail <slug>`, adding `--games` for a game library.
 

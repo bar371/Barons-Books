@@ -2,7 +2,9 @@
 
   python scripts/cloud_sync.py pull [--all]          who needs picks -> data/cloud/todo.json + one snapshot per library
   python scripts/cloud_sync.py push <slug> [--games] validate the picks file, add covers, save to Supabase
-                                  (games: add --covers-done once the web cover search is finished)
+  python scripts/cloud_sync.py covers <slug>         games: the next few games to find a box picture for (worklist)
+  python scripts/cloud_sync.py cover <slug> <key> <picture-url>         record the box picture found for a game
+  python scripts/cloud_sync.py cover <slug> <key> none <page-url>...    record that the pages searched had none
   python scripts/cloud_sync.py fail <slug> [--games] mark that person's running request as failed
   python scripts/cloud_sync.py og <page-url>...      candidate box pictures on each web page, saved to data/cloud/covers/
 
@@ -142,9 +144,9 @@ def snapshot(prof, ov, pk, kind="books"):
     }
     if kind == "games":  # games added by name (or with thin Wikidata entries) need their details filled in
         snap["needDetails"] = [b["id"] for b in allb if any(b.get(f) in (None, "", []) for f in ("author", "year", "players", "playtime"))]
-        # box pictures still to look for on the web: each game is searched once (coverTried remembers the misses)
-        tried = set(pk.get("coverTried") or [])
-        snap["coverTried"] = sorted(tried)
+        # box pictures still to look for on the web: each game is searched once (coverSearched remembers them)
+        tried = set(pk.get("coverSearched") or [])
+        snap["coverSearched"] = sorted(tried)
         snap["needCover"] = [b["id"] for b in allb if (not b.get("cover") or is_photo(b["cover"])) and b["id"] not in tried]
         snap["recsNeedCover"] = [r["title"] for r in pk.get("recs") or [] if not r.get("cover") and "rec:" + key(r["title"]) not in tried]
     return snap
@@ -321,7 +323,7 @@ def uid_of(slug):
     return rows[0]["id"]
 
 
-def push(slug, kind="books", covers_done=False):
+def push(slug, kind="books"):
     T = KINDS[kind]
     t0 = time.monotonic()
     snap = json.loads((OUT / f'{slug}{T["ext"]}.json').read_text("utf8"))
@@ -336,7 +338,7 @@ def push(slug, kind="books", covers_done=False):
     subs = {s for v in tree.values() for s in v}
     old_new = (snap["currentPicks"].get("newGenres") or [])
     new = old_new + [g for g in new if g["id"] not in {x["id"] for x in old_new}]
-    warn = []
+    warn, notes = [], []
     ids = {b["id"] for b in snap["read"] + snap["reading"] + snap["toRead"]}
     read_ids = {b["id"] for b in snap["read"]}
     books = dict(snap["currentPicks"].get("books") or {})
@@ -354,7 +356,7 @@ def push(slug, kind="books", covers_done=False):
             e.update(game_details(b))
             if b.get("cover"):
                 if ok.get(b["cover"]): e["cover"] = b["cover"]
-                else: warn.append(f"game {i}: cover doesn't load or isn't allowed: {b['cover'][:100]}")
+                else: notes.append(f"game {i}: cover doesn't load or isn't allowed, left out: {b['cover'][:100]}")
         if e: books[i] = {**books.get(i, {}), **e}
     owned = {key(b["title"]) for b in snap["read"] + snap["reading"] + snap["toRead"]}
     fixed = {key(t.split(" — ")[0]) for t in snap["fixedRecs"]}
@@ -379,7 +381,7 @@ def push(slug, kind="books", covers_done=False):
             late = time.monotonic() - t0 > 120
             look = {} if late or (prev.get("cover") and prev.get("bggId")) else wd_game(r["title"])
             web = r.get("cover") if ok.get(r.get("cover")) else None
-            if r.get("cover") and not web: warn.append(f"rec {r['title']}: cover doesn't load or isn't allowed")
+            if r.get("cover") and not web: notes.append(f"rec {r['title']}: cover doesn't load or isn't allowed, left out (the pick is kept)")
             rec["cover"] = web or prev.get("cover") or look.get("cover")
             rec["bggId"] = prev.get("bggId") or look.get("bggId")
             for f in ("players", "playtime"):
@@ -388,13 +390,15 @@ def push(slug, kind="books", covers_done=False):
             rec["cover"] = prev.get("cover") or r.get("cover") or ol_cover(r["title"], r["author"])
         recs.append(rec)
     data = {"updated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "newGenres": new, "books": books, "recs": recs}
-    if kind == "games":
-        lib_missing = [i for i in snap.get("needCover") or [] if not (books.get(i) or {}).get("cover")]
-        rec_missing = [r["title"] for r in recs if not r.get("cover")]
-        tried = set(snap.get("coverTried") or [])
-        if covers_done:  # searched: don't search these again on later runs (new games and new picks still get searched)
-            tried |= set(lib_missing) | {"rec:" + key(t) for t in rec_missing}
-        data["coverTried"] = sorted(tried)
+    if kind == "games":  # the web cover search (see `covers`): apply what was found, remember what was searched
+        wl = worklist_load(slug)
+        for k, u in wl["found"].items():
+            if k.startswith("rec:"):
+                for r in recs:
+                    if "rec:" + key(r["title"]) == k: r["cover"] = u
+            elif k in ids:
+                books[k] = {**books.get(k, {}), "cover": u}
+        data["coverSearched"] = sorted(set(snap.get("coverSearched") or []) | set(wl["found"]) | set(wl["none"]))
     uid = uid_of(slug)
     api(f'/{T["picks"]}?on_conflict=user_id', "POST", {"user_id": uid, "data": data, "updated_at": data["updated"]},
         "resolution=merge-duplicates,return=minimal")
@@ -403,16 +407,71 @@ def push(slug, kind="books", covers_done=False):
           f"{len(books)} {'game' if kind == 'games' else 'book'} notes, {len(new)} new {'categories' if kind == 'games' else 'genres'}")
     for w in warn:
         print("  skipped " + w)
+    for n in notes:
+        print("  note: " + n)
     if kind == "games":
-        title = {b["id"]: b["title"] for b in snap["read"] + snap["reading"] + snap["toRead"]}
-        if covers_done:
-            print(f"covers: {len(snap.get('needCover') or []) - len(lib_missing)} library games and {sum(1 for r in recs if r.get('cover'))} picks have a box picture; "
-                  f"{len(lib_missing) + len(rec_missing)} not found (not searched again)")
-        elif lib_missing or rec_missing:
-            print(f"\nNEXT STEP, required: {len(lib_missing)} library games and {len(rec_missing)} picks have no box picture yet:\n  "
-                  + "; ".join([title.get(i, i) for i in lib_missing] + rec_missing)
-                  + f"\nDo \"Box covers from the web\" in ROUTINE.md, add the covers to data/cloud/{slug}.games.picks.json,"
-                  f" then run: python3 scripts/cloud_sync.py push {slug} --games --covers-done")
+        left = worklist_pending(slug, snap, recs, books)
+        if left:
+            print(f"\nNEXT STEP, required: {len(left)} games still need a box picture search. Run: python3 scripts/cloud_sync.py covers {slug}"
+                  f"\nand keep going until it says ALL DONE, then run this push again.")
+        else:
+            print(f"covers: all searched ({len(wl['found'])} found on the web this run, {len(wl['none'])} with none)")
+
+
+def worklist_file(slug):
+    return OUT / f"{slug}.covers.json"
+
+
+def worklist_load(slug):
+    f = worklist_file(slug)
+    return json.loads(f.read_text("utf8")) if f.exists() else {"todo": [], "found": {}, "none": {}}
+
+
+def worklist_pending(slug, snap, recs=None, books=None):
+    """Games (library ids, 'rec:<title key>' for picks) with no box picture that nobody has searched for yet."""
+    wl = worklist_load(slug)
+    done = set(snap.get("coverSearched") or []) | set(wl["found"]) | set(wl["none"])
+    if recs is None:
+        pf = OUT / f"{slug}.games.picks.json"
+        recs = (json.loads(pf.read_text("utf8")).get("recs") or []) if pf.exists() else []
+    prev = {key(r["title"]): r for r in snap["currentPicks"].get("recs") or []}
+    books = books if books is not None else (snap["currentPicks"].get("books") or {})
+    lib = {b["id"]: b for b in snap["read"] + snap["reading"] + snap["toRead"]}
+    out = [{"key": i, "title": lib[i]["title"], "designer": lib[i].get("author"), "year": lib[i].get("year")}
+           for i in snap.get("needCover") or [] if i in lib and i not in done and not (books.get(i) or {}).get("cover")]
+    for r in recs:
+        k = "rec:" + key(r["title"])
+        if k not in done and not r.get("cover") and not (prev.get(key(r["title"])) or {}).get("cover"):
+            out.append({"key": k, "title": r["title"], "designer": r.get("author"), "year": r.get("year")})
+    return out
+
+
+def covers(slug):
+    snap = json.loads((OUT / f"{slug}.games.json").read_text("utf8"))
+    left = worklist_pending(slug, snap)
+    if not left:
+        print(f"ALL DONE: every game has a box picture or was searched. Now run: python3 scripts/cloud_sync.py push {slug} --games")
+        return
+    print(f"{len(left)} games still to search. Next batch (search each, then record it with `cover`):")
+    print(json.dumps(left[:6], ensure_ascii=False, indent=1))
+    print(f"Record each one: python3 scripts/cloud_sync.py cover {slug} <key> <picture-url>"
+          f"\n  or, if the pages you checked had no box picture: python3 scripts/cloud_sync.py cover {slug} <key> none <page-url> [<page-url> ...]"
+          "\nThen run `covers` again for the next batch. Don't stop until it says ALL DONE: there is no time limit.")
+
+
+def cover(slug, k, args):
+    wl = worklist_load(slug)
+    if args[:1] == ["none"]:
+        pages = [a for a in args[1:] if a.startswith("http")]
+        if not pages:
+            sys.exit("Give the page urls you checked: cover <slug> <key> none <page-url> [<page-url> ...]")
+        wl["none"][k] = pages; wl["found"].pop(k, None)
+    elif len(args) == 1 and img_ok(args[0]):
+        wl["found"][k] = args[0]; wl["none"].pop(k, None)
+    else:
+        sys.exit("That picture doesn't load, isn't https, or is from BoardGameGeek: pick another one.")
+    worklist_file(slug).write_text(json.dumps(wl, ensure_ascii=False, indent=1), "utf8")
+    print(f"recorded {k}: {'none' if k in wl['none'] else wl['found'][k]}")
 
 
 def game_details(b):
@@ -441,7 +500,11 @@ if __name__ == "__main__":
     if a[:1] == ["pull"]:
         pull("--all" in a)
     elif a[:1] == ["push"] and len(a[1:]) in (1, 2) and a[2:] in ([], ["--covers-done"]):
-        push(a[1], kind, "--covers-done" in a)
+        push(a[1], kind)
+    elif a[:1] == ["covers"] and len(a) == 2:
+        covers(a[1])
+    elif a[:1] == ["cover"] and len(a) >= 4:
+        cover(a[1], a[2], a[3:])
     elif a[:1] == ["og"] and len(a) > 1:
         og(a[1:])
     elif a[:1] == ["fail"] and len(a) == 2:
