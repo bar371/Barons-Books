@@ -298,6 +298,7 @@ function resize() {
   canvas.width = W * DPR; canvas.height = H * DPR;
 }
 addEventListener("resize", () => { resize(); renderPanelVisibility(); });
+if (window.ResizeObserver) { const dk = $(".dock"); new ResizeObserver(() => document.documentElement.style.setProperty("--dock-h", dk.offsetHeight + "px")).observe(dk); } // phones: the panel sits above the dock
 
 function initStars() {
   const rnd = d3.randomLcg(7);
