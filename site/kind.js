@@ -157,6 +157,8 @@
     tables: { edits: "game_edits", picks: "game_picks" },
     png: "barons-games.png",
     box: [40, 40], // square game boxes
+    // tabletop look instead of the star map: hex tiles, a hex board, embers and a compass rose (app.js + style.css)
+    look: { table: true, hex: true, font: "Cinzel, Fraunces, Georgia, serif", themeColor: { dark: "#120c08", light: "#efe0bd" } },
     sub: (m) => `${m.read} owned or played · ${m.queued || 0} on the wishlist · ${m.recommended} recommended`,
     items: "games",
     count: (n) => many(n, "game", "games"),
@@ -283,6 +285,7 @@
       [".brand h1", "innerHTML", "Baron's <em>Games</em>"],
       ["#q", "placeholder", "Search games, designers, categories…"],
       ["#stage", "aria-label", "Interactive map of board games and categories"],
+      ["#loader p", "textContent", "Setting up the table…"],
       ['.modes [data-mode="clusters"]', "title", "Category clusters (2)"],
       ["label:has(#t-recs)", "title", "Show recommended games (R)"],
       ["label:has(#t-queue)", "title", "Show my wishlist and what's on the table (Q)"],
@@ -303,5 +306,6 @@
   for (const [sel, prop, v] of K.dom || []) { const el = document.querySelector(sel); if (el) el[prop] === undefined ? el.setAttribute(prop, v) : (el[prop] = v); }
   if (K.dom) { const q = document.querySelector("#t-queue"), t = q?.parentElement?.lastChild; if (t?.nodeType === 3) t.nodeValue = "Wishlist"; }
   document.documentElement.dataset.kind = K.id; // lets style.css theme each kind
+  if (K.id === "games") document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" })); // the tabletop look's display font
   if (K.id === "games") document.head.append(Object.assign(document.createElement("meta"), { name: "referrer", content: "no-referrer" })); // publisher sites often refuse pictures shown on other sites
 })();

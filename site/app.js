@@ -4,6 +4,8 @@
 "use strict";
 const $ = (s) => document.querySelector(s);
 const K = window.KIND; // words, links and sources for this kind of library (kind.js)
+const LOOK = K.look || {}; // per-kind map style (games: a tabletop); books leave it empty and keep the star map
+const SERIF = LOOK.font || "Fraunces, Georgia, serif";
 const canvas = $("#stage"), ctx = canvas.getContext("2d");
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -32,7 +34,7 @@ function readColors() {
 }
 function setTheme(t) {
   document.documentElement.dataset.theme = t; store.set("theme", t);
-  document.querySelector('meta[name="theme-color"]').content = t === "light" ? "#f7f2e8" : "#070a14";
+  document.querySelector('meta[name="theme-color"]').content = t === "light" ? (LOOK.themeColor?.light || "#f7f2e8") : (LOOK.themeColor?.dark || "#070a14");
   readColors();
 }
 setTheme(store.get("theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
@@ -62,6 +64,7 @@ function init(d) {
   data = d;
   if (window.LibraryEdits) { try { window.LibraryEdits.apply(d); } catch (e) { console.warn("edits not applied", e); } }
   const atlasP = loadAtlas(d.atlas);
+  if (!d.genres.some((g) => g.count)) recount(); // game categories arrive uncounted (books come pre-counted)
   build();
   resize();
   initStars();
@@ -301,6 +304,7 @@ function initStars() {
   stars = d3.range(260).map(() => ({ x: rnd(), y: rnd(), z: 0.15 + rnd() * 0.85, r: 0.4 + rnd() * 1.3, p: rnd() * 6.28 }));
 }
 function drawBackground(t) {
+  if (LOOK.table) return drawTable(t);
   const g = ctx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.45, Math.max(W, H) * 0.8);
   g.addColorStop(0, C.bg1); g.addColorStop(1, C.bg0);
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
@@ -321,6 +325,69 @@ function drawBackground(t) {
   }
 }
 
+/* ---------- tabletop look (games) ---------- */
+function hexPath(x, y, r) { // pointy-top hexagon, like a board tile
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + (i * Math.PI) / 3; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  ctx.closePath();
+}
+let hexPat = null, hexPatLight = null;
+function hexPattern() { // one tile of a faint hex board, drawn once per theme and repeated
+  if (hexPat && hexPatLight === C.light) return hexPat;
+  const w = 64, s = w / Math.sqrt(3), h = Math.round(3 * s), c = document.createElement("canvas"); c.width = w; c.height = h;
+  const g = c.getContext("2d"); g.strokeStyle = C.light ? "rgba(90,60,25,.11)" : "rgba(255,214,150,.06)"; g.lineWidth = 1;
+  for (const [cx, cy] of [[0, 0], [w, 0], [w / 2, h / 2], [0, h], [w, h]]) {
+    g.beginPath(); for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + (i * Math.PI) / 3; g.lineTo(cx + Math.cos(a) * s, cy + Math.sin(a) * s); } g.closePath(); g.stroke();
+  }
+  hexPatLight = C.light; return (hexPat = ctx.createPattern(c, "repeat"));
+}
+function drawTable(t) {
+  const g = ctx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.45, Math.max(W, H) * 0.8);
+  g.addColorStop(0, C.bg1); g.addColorStop(1, C.bg0);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // soft pools of colour, like regions on a map, tinted by the categories
+  const gs = data.genres.filter((x) => !x.parent).slice(0, 4);
+  gs.forEach((ge, i) => {
+    const a = t * 0.00003 * (i + 1) + i * 1.7, px = W * (0.5 + 0.38 * Math.cos(a)) + T.x * 0.05, py = H * (0.5 + 0.34 * Math.sin(a * 1.3)) + T.y * 0.05, r = Math.max(W, H) * 0.42;
+    const ng = ctx.createRadialGradient(px, py, 0, px, py, r);
+    ng.addColorStop(0, rgba(ge.color, C.light ? 0.09 : 0.07)); ng.addColorStop(1, rgba(ge.color, 0));
+    ctx.fillStyle = ng; ctx.fillRect(0, 0, W, H);
+  });
+  const pat = hexPattern(); // the board drifts a little when you pan, like the stars do
+  pat.setTransform(new DOMMatrix().translate(T.x * 0.12, T.y * 0.12));
+  ctx.fillStyle = pat; ctx.fillRect(0, 0, W, H);
+  // embers (dark) or dust (light) rising slowly through candle light
+  for (let i = 0; i < 110; i++) {
+    const s = stars[i], span = H * 1.3;
+    const x = (((s.x * W * 1.3 + T.x * s.z * 0.12 + (reduce ? 0 : Math.sin(t * 0.0004 * s.z + s.p) * 14)) % (W * 1.3)) + W * 1.3) % (W * 1.3) - W * 0.15;
+    const y = (((s.y * span + T.y * s.z * 0.12 - (reduce ? 0 : t * 0.012 * s.z)) % span) + span) % span - H * 0.15;
+    const fl = reduce ? 0.7 : 0.5 + 0.5 * Math.sin(t * 0.004 * s.z + s.p * 3);
+    ctx.fillStyle = C.light ? `rgba(110,75,35,${0.22 * s.z * fl})` : `rgba(255,${150 + Math.round(70 * s.z)},90,${0.65 * s.z * fl})`;
+    ctx.beginPath(); ctx.arc(x, y, s.r * s.z * 0.9 + 0.3, 0, 6.283); ctx.fill();
+  }
+  const v = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.35, W * 0.5, H * 0.5, Math.max(W, H) * 0.75); // vignette
+  v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, C.light ? "rgba(110,70,25,.22)" : "rgba(0,0,0,.5)");
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+}
+function drawCompass(t) { // a faint compass rose under the map's centre, like an old map
+  const root = byId.get("root"); if (!root || mode !== "constellation") return;
+  const R = 240, col = C.light ? "90,60,25" : "255,214,150", k = T.k;
+  ctx.save(); ctx.translate(root.x, root.y); ctx.lineWidth = 1.2 / k;
+  ctx.strokeStyle = `rgba(${col},.13)`;
+  for (const rr of [R, R * 0.93, R * 0.42]) { ctx.beginPath(); ctx.arc(0, 0, rr, 0, 6.283); ctx.stroke(); }
+  ctx.beginPath(); for (let i = 0; i < 72; i++) { const a = (i / 72) * 6.283, l = i % 9 ? 0.965 : 0.9; ctx.moveTo(Math.cos(a) * R * 0.93, Math.sin(a) * R * 0.93); ctx.lineTo(Math.cos(a) * R * l * 0.93, Math.sin(a) * R * l * 0.93); } ctx.stroke();
+  ctx.rotate(reduce ? 0 : Math.sin(t * 0.00015) * 0.04); // the needle settles, never quite still
+  for (let i = 0; i < 8; i++) {
+    const a = (i * Math.PI) / 4 - Math.PI / 2, long = i % 2 === 0, L = R * (long ? 0.88 : 0.5), wd = R * (long ? 0.09 : 0.06);
+    const tx = Math.cos(a) * L, ty = Math.sin(a) * L, px = Math.cos(a + Math.PI / 2) * wd, py = Math.sin(a + Math.PI / 2) * wd;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(tx, ty); ctx.lineTo(-px, -py); ctx.closePath();
+    ctx.fillStyle = `rgba(${col},${long ? 0.1 : 0.06})`; ctx.fill(); ctx.stroke();
+  }
+  ctx.fillStyle = `rgba(${col},.22)`; ctx.font = `700 ${22}px ${SERIF}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("N", 0, -R - 18);
+  ctx.restore();
+}
+
 function drawTimeline() {
   if (!timeline) return;
   const { xs, lo, hi, lanes, halfW, top, bot } = timeline, k = T.k;
@@ -328,7 +395,7 @@ function drawTimeline() {
   for (const { g, y0, h } of lanes) {
     ctx.fillStyle = rgba(g.color, C.light ? 0.07 : 0.05);
     ctx.fillRect(-halfW - 160, y0 + 6, halfW * 2 + 320, h - 12);
-    ctx.fillStyle = rgba(g.color, 0.9); ctx.font = `600 ${15 / k}px Fraunces, Georgia, serif`; ctx.textAlign = "left"; ctx.textBaseline = "top";
+    ctx.fillStyle = rgba(g.color, 0.9); ctx.font = `600 ${15 / k}px ${SERIF}`; ctx.textAlign = "left"; ctx.textBaseline = "top";
     ctx.fillText(g.name, -halfW - 140, y0 + 16);
   }
   const ticks = [...d3.range(Math.ceil(lo / 10) * 10, 2000, 10), ...d3.range(2000, hi + 1, k > 0.5 ? 2 : 5)];
@@ -400,7 +467,7 @@ function drawGenre(n, t, s) {
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(n.x, n.y, r * 3.4, 0, 6.283); ctx.fill();
   const body = ctx.createRadialGradient(n.x - r * 0.3, n.y - r * 0.35, r * 0.1, n.x, n.y, r);
   body.addColorStop(0, shade(n.color, 0.55)); body.addColorStop(1, shade(n.color, n.kind === "root" ? -0.1 : -0.35));
-  ctx.globalAlpha = n.a; ctx.fillStyle = body; ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 6.283); ctx.fill();
+  ctx.globalAlpha = n.a; ctx.fillStyle = body; LOOK.hex ? hexPath(n.x, n.y, r * 1.1) : (ctx.beginPath(), ctx.arc(n.x, n.y, r, 0, 6.283)); ctx.fill();
   ctx.lineWidth = 1.5 / k ** 0.5; ctx.strokeStyle = rgba("#ffffff", 0.45); ctx.stroke();
   if (n.kind === "root") { // orbiting ring
     ctx.strokeStyle = rgba(n.color, 0.5 * n.a); ctx.setLineDash([3, 7]); ctx.lineDashOffset = -t * 0.01; ctx.beginPath(); ctx.arc(n.x, n.y, r * 1.35, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
@@ -410,7 +477,7 @@ function drawGenre(n, t, s) {
 function drawGenreLabel(n, s) {
   const k = T.k, r = n.rad * s, size = (n.kind === "sub" ? 12 : n.kind === "macro" ? 15 : 17) / Math.max(k, 0.55) ** 0.85;
   ctx.globalAlpha = Math.max(n.a, 0.25);
-  haloText(n.name, n.x, n.y + r + 5 / k ** 0.6, size, n.kind === "sub" ? 500 : 600, C.ink, n.kind === "sub" ? "Inter, sans-serif" : "Fraunces, Georgia, serif");
+  haloText(n.name, n.x, n.y + r + 5 / k ** 0.6, size, n.kind === "sub" ? 500 : 600, C.ink, n.kind === "sub" ? "Inter, sans-serif" : SERIF);
   ctx.globalAlpha = 1;
 }
 
@@ -430,7 +497,7 @@ function cover(n, x, y, w, h) {
   const g = ctx.createLinearGradient(x, y, x + w, y + h);
   g.addColorStop(0, shade(n.color, -0.1)); g.addColorStop(1, shade(n.color, -0.6));
   ctx.fillStyle = g; ctx.fillRect(x, y, w, h);
-  if (w * T.k > 14) { ctx.fillStyle = "rgba(255,255,255,.88)"; ctx.font = `700 ${w * 0.3}px Fraunces, Georgia, serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  if (w * T.k > 14) { ctx.fillStyle = "rgba(255,255,255,.88)"; ctx.font = `700 ${w * 0.3}px ${SERIF}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
     ctx.fillText(n.title.split(/\s+/).slice(0, 2).map((w) => w[0]).join(""), x + w / 2, y + h / 2); }
 }
 function rankBadge(n, x, y, w, h) { // top-10 picks wear a numbered medal
@@ -447,7 +514,7 @@ function drawBook(n, t, s) {
   if (sx < -mg || sx > W + mg || sy < -mg || sy > H + mg) return; // off-screen: skip
   const lit = n === (hover || selected);
   if (w * k < 9) { // far away: a plain star
-    ctx.globalAlpha = n.a; ctx.fillStyle = n.color; ctx.beginPath(); ctx.arc(n.x, n.y, 5.5 * n.sc * s, 0, 6.283); ctx.fill();
+    ctx.globalAlpha = n.a; ctx.fillStyle = n.color; ctx.beginPath(); LOOK.hex ? ctx.roundRect(n.x - 5 * n.sc * s, n.y - 5 * n.sc * s, 10 * n.sc * s, 10 * n.sc * s, 2 * s) : ctx.arc(n.x, n.y, 5.5 * n.sc * s, 0, 6.283); ctx.fill();
     if (isRec || isQ) { ctx.setLineDash(isRec ? [2, 2] : [1, 2]); ctx.strokeStyle = reading ? "#ffd43b" : n.color; ctx.lineWidth = 1 / k; ctx.beginPath(); ctx.arc(n.x, n.y, 9 * s, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); }
     ctx.globalAlpha = 1; return;
   }
@@ -504,6 +571,7 @@ function frame(t) {
     n.a = lerp(n.a, targetAlpha(n), 0.14);
     const ts = n === selected ? 1.28 : n === hover ? 1.2 : 1; n.s = lerp(n.s, ts, 0.2);
   }
+  if (LOOK.table) drawCompass(t);
   drawLinks(t);
   const top = [];
   for (const n of drawOrder) {

@@ -9,6 +9,18 @@
   --panel:rgba(255,252,246,.74); --panel-solid:#fffcf6; --accent:#3b5bdb; --accent-ink:#fff;
   --shadow:0 10px 36px rgba(60,44,10,.18); --edge:60,70,100; --halo:247,242,232;
 }
+/* board games (?kind=games): a candle-lit tabletop (dark) or a parchment map (light); books keep the tokens above */
+:root[data-kind="games"]{
+  --bg0:#120c08; --bg1:#2b1d12; --ink:#f3e7cf; --muted:#b59d7d; --line:rgba(255,228,180,.11);
+  --panel:rgba(32,22,14,.72); --panel-solid:#22180f; --accent:#e2aa4c; --accent-ink:#1d1206;
+  --shadow:0 10px 40px rgba(0,0,0,.55); --edge:255,220,170; --halo:18,12,8;
+  --display:"Cinzel","Fraunces","Iowan Old Style",Georgia,serif;
+}
+:root[data-kind="games"][data-theme="light"]{
+  --bg0:#e6d3a8; --bg1:#f7ecd3; --ink:#2f2114; --muted:#7a6248; --line:rgba(70,45,20,.15);
+  --panel:rgba(250,241,220,.8); --panel-solid:#f8eed8; --accent:#9b2f22; --accent-ink:#fff7ea;
+  --shadow:0 10px 36px rgba(70,45,15,.22); --edge:90,60,30; --halo:247,236,211;
+}
 *{box-sizing:border-box;margin:0}
 html,body{height:100%;overflow:hidden;background:var(--bg0);color:var(--ink);font:14px/1.45 var(--ui);-webkit-font-smoothing:antialiased}
 canvas{position:fixed;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
@@ -215,3 +227,8 @@ kbd{font:500 11px var(--ui);padding:1px 6px;border:1px solid var(--line);border-
 
 .ab-import{margin:6px 0 2px;font-size:13px} .ab-import label{cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
 .blurb.mynote{font-style:italic}
+/* tabletop details for board games */
+:root[data-kind="games"] .loader-star{background:var(--accent);clip-path:polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%);filter:drop-shadow(0 0 12px var(--accent))}
+:root[data-kind="games"] .macro i{border-radius:0;clip-path:polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%);box-shadow:none;width:12px;height:13px}
+:root[data-kind="games"] .brand h1{letter-spacing:.02em}
+:root[data-kind="games"] .why{font-family:"Fraunces","Iowan Old Style",Georgia,serif}
