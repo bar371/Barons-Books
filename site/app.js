@@ -148,7 +148,7 @@ function visibleGraph() {
 }
 
 function setupSim() {
-  sim = d3.forceSimulation().alphaDecay(0.036).velocityDecay(0.34).on("tick", () => {}); // snappy: moves quickly, settles in ~2s
+  sim = d3.forceSimulation().alphaDecay(0.025).velocityDecay(0.34).on("tick", () => {}); // low friction (moves quickly) + the original slow cool-down, so the map still visibly settles after the 160 pre-ticks
 }
 function applyLayout(alpha = 0.9, instant = false) {
   const { ns, ls } = visibleGraph();
