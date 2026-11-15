@@ -6,7 +6,7 @@ const $ = (s) => document.querySelector(s);
 const K = window.KIND; // words, links and sources for this kind of library (kind.js)
 const LOOK = K.look || {}; // per-kind map style (games: a tabletop); books leave it empty and keep the star map
 const SERIF = LOOK.font || "Fraunces, Georgia, serif";
-const THEME_KEY = K.id === "books" ? "theme" : "theme-" + K.id; // each map remembers its own light / dark
+const THEME_KEY = "theme-" + K.id; // each map remembers its own light / dark (the old shared "theme" key is ignored: games' parchment had switched books to light)
 const canvas = $("#stage"), ctx = canvas.getContext("2d");
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -38,7 +38,7 @@ function setTheme(t) {
   document.querySelector('meta[name="theme-color"]').content = t === "light" ? (LOOK.themeColor?.light || "#f7f2e8") : (LOOK.themeColor?.dark || "#070a14");
   readColors();
 }
-setTheme(store.get(THEME_KEY) || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
+setTheme(store.get(THEME_KEY) || (K.id === "books" ? "dark" : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")); // books open in space unless you chose light
 
 /* ---------- color helpers ---------- */
 function rgba(hex, a) {
