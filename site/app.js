@@ -159,7 +159,7 @@ function visibleGraph() {
 }
 
 function setupSim() {
-  sim = d3.forceSimulation().alphaDecay(0.025).velocityDecay(0.34).on("tick", () => {}); // low friction (moves quickly) + the original slow cool-down, so the map still visibly settles after the 160 pre-ticks
+  sim = d3.forceSimulation().alphaDecay(0.025).velocityDecay(0.28).on("tick", () => {}); // low friction (moves quickly) + the original slow cool-down, so the map still visibly settles after the 160 pre-ticks
 }
 function applyLayout(alpha = 0.9, instant = false) {
   const { ns, ls } = visibleGraph();
@@ -181,7 +181,7 @@ function applyLayout(alpha = 0.9, instant = false) {
   const busy = (l) => Math.max(1, (crowd.get(l.source) || 0) / CROWD), maxBusy = Math.max(1, ...[...crowd.values()].map((k) => k / CROWD));
   const dist = (l) => l.type === "tree" ? (l.source.kind === "root" ? (cl ? 175 : 300) : cl ? 125 : 170) : l.type === "genre" ? (l.primary ? (cl ? 95 : 70) * Math.sqrt(busy(l)) : 150) : l.type === "series" ? 48 : 125;
   const str = (l) => tl ? (l.type === "series" ? 0.04 : 0) : l.type === "tree" ? (cl ? 0.85 : 0.35) : l.type === "genre" ? (l.primary ? (cl ? 0.9 : 0.55) / busy(l) : cl ? 0.04 : 0.07) : l.type === "series" ? 0.5 : 0.07;
-  sim.velocityDecay(tl ? 0.34 : Math.min(0.41, 0.34 + 0.02 * (maxBusy - 1))); // a touch more friction when anything is crowded
+  sim.velocityDecay(tl ? 0.28 : Math.min(0.35, 0.28 + 0.02 * (maxBusy - 1))); // a touch more friction when anything is crowded
   sim.nodes(ns).force("link", d3.forceLink(L).distance(dist).strength(str))
     .force("charge", d3.forceManyBody().strength((n) => tl ? -20 : n.kind === "root" ? -1100 : n.kind === "macro" ? -800 : n.kind === "sub" ? (cl ? -520 : -300) : cl ? -150 : -110).distanceMax(520))
     .force("collide", d3.forceCollide((n) => n.rad * (n.sc || 1) + (tl ? 4 : n.kind === "sub" ? 26 : n.kind === "macro" ? 22 : 8)).iterations(2).strength(0.9));
@@ -591,7 +591,7 @@ function float(t, on) {
   if (reduce) return false;
   for (let i = 0; i < vNodes.length; i++) {
     const n = vNodes[i]; if (n.kind === "root" || n.fx != null) continue;
-    const amp = isItem(n) ? 2.4 : 1.4, a = t * (0.00045 + (i % 7) * 0.00005) + i * 2.399;
+    const amp = isItem(n) ? 2.4 : 1.4, a = t * (0.0008 + (i % 7) * 0.00008) + i * 2.399;
     const dx = Math.cos(a) * amp, dy = Math.sin(a * 1.3) * amp;
     if (on) { n.x += dx; n.y += dy; } else { n.x -= dx; n.y -= dy; }
   }
@@ -631,7 +631,7 @@ const tip = $("#tip");
 canvas.addEventListener("pointerdown", (e) => {
   const [x, y] = d3.pointer(e, canvas), n = pick(x, y);
   press = { x, y, n, moved: false, id: e.pointerId };
-  if (n) { canvas.setPointerCapture(e.pointerId); canvas.classList.add("drag"); const [wx, wy] = T.invert([x, y]); press.ox = n.x - wx; press.oy = n.y - wy; n.fx = n.x; n.fy = n.y; sim.alphaTarget(0.25).alpha(Math.max(sim.alpha(), 0.2)).restart(); hideTip(); } // neighbours react at once, not after a slow warm-up
+  if (n) { canvas.setPointerCapture(e.pointerId); canvas.classList.add("drag"); const [wx, wy] = T.invert([x, y]); press.ox = n.x - wx; press.oy = n.y - wy; n.fx = n.x; n.fy = n.y; sim.alphaTarget(0.25).alpha(Math.max(sim.alpha(), 0.3)).restart(); hideTip(); } // neighbours react at once, not after a slow warm-up
 });
 canvas.addEventListener("pointermove", (e) => {
   const [x, y] = d3.pointer(e, canvas);
