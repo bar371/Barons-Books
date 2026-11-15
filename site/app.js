@@ -93,7 +93,7 @@ function init(d) {
 /* ---------- graph model ---------- */
 function build() {
   const gmap = new Map(data.genres.map((g) => [g.id, g]));
-  const add = (n) => { n.a = 1; n.s = 1; n.born = 0; n.vis = false; n.x = (Math.random() - .5) * 60; n.y = (Math.random() - .5) * 60; nodes.push(n); byId.set(n.id, n); return n; };
+  const add = (n) => { n.a = 1; n.s = 1; n.born = 0; n.vis = false; n.x = (hash01(n.id, 1) - .5) * 60; n.y = (hash01(n.id, 2) - .5) * 60; nodes.push(n); byId.set(n.id, n); return n; }; // same start every load
   add({ id: "root", kind: "root", name: `${data.meta?.owner || "Baron"}'s ${K.lib}`, color: "#ffd43b", rad: 34, gset: new Set() });
   for (const g of data.genres.filter((g) => !g.parent)) genreNodes.set(g.id, add({ id: "g:" + g.id, gid: g.id, kind: "macro", name: g.name, color: g.color, rad: 26, count: g.count, gset: new Set() }));
   for (const g of data.genres.filter((g) => g.parent)) genreNodes.set(g.id, add({ id: "g:" + g.id, gid: g.id, kind: "sub", name: g.name, color: g.color, parentG: g.parent, rad: 15, count: g.count, gset: new Set() }));
@@ -130,6 +130,13 @@ function build() {
 function yearOf(b) {
   if (b.year) return b.year;
   const y = parseInt((b.dateRead || "").slice(0, 4)); return y || null;
+}
+
+// A stable pseudo-random number in [0,1) per id: layouts start from the same spot on every load instead of Math.random().
+function hash01(id, salt = 0) {
+  let h = 2166136261 ^ salt; const s = String(id);
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  h ^= h >>> 15; h = Math.imul(h, 2246822507); h ^= h >>> 13; return (h >>> 0) / 4294967296;
 }
 
 /* ---------- visibility + layout ---------- */
@@ -202,12 +209,27 @@ function applyLayout(alpha = 0.9, instant = false) {
     fx = d3.forceX((n) => xs(n.yr || med)).strength(0.55);
     fy = d3.forceY((n) => lanes[laneOf(n)].cy).strength(0.16);
   } else {
-    // mind map: genres fan out around the root, sub-genres further out, books gather around their sub-genre
+    // mind map: genres fan out around the root. Each genre gets a slice of the circle sized by how many items it holds,
+    // each sub-genre its own spot fanned out inside that slice, and every item a gentle pull towards its own sub-genre,
+    // so big genres can't shove small ones around and the map comes out the same on every load.
     const mac = nodes.filter((n) => n.kind === "macro" && ns.includes(n)).sort((a, b) => b.count - a.count);
-    const pos = new Map(mac.map((g, i) => { const a = -Math.PI / 2 + ((i + 0.5) / mac.length) * Math.PI * 2 + 0.35, r = 300 + 34 * Math.sqrt(g.count); return [g.gid, [Math.cos(a) * r, Math.sin(a) * r]]; }));
-    const at = (n) => { const p = pos.get(n.kind === "macro" ? n.gid : n.parentG) || [0, 0], k = n.kind === "sub" ? 1.45 : 1; return [p[0] * k, p[1] * k]; };
-    fx = d3.forceX((n) => (n.kind === "macro" || n.kind === "sub" ? at(n)[0] : 0)).strength((n) => n.kind === "macro" ? 0.3 : n.kind === "sub" ? 0.05 : 0.004);
-    fy = d3.forceY((n) => (n.kind === "macro" || n.kind === "sub" ? at(n)[1] : 0)).strength((n) => n.kind === "macro" ? 0.3 : n.kind === "sub" ? 0.05 : 0.004);
+    const wt = mac.map((g) => Math.sqrt(g.count || 1) + 1.5), tot = d3.sum(wt) || 1;
+    const pos = new Map(), spos = new Map(); let acc = 0;
+    mac.forEach((g, i) => {
+      const span = (wt[i] / tot) * Math.PI * 2, a = -Math.PI / 2 + acc + span / 2 + 0.35, r = 300 + 34 * Math.sqrt(g.count); acc += span;
+      pos.set(g.gid, [Math.cos(a) * r, Math.sin(a) * r]);
+      const subs = ns.filter((n) => n.kind === "sub" && n.parentG === g.gid).sort((x, y) => y.count - x.count || (x.gid < y.gid ? -1 : 1));
+      const fan = Math.min(span * 0.8, 1.7), k = subs.length;
+      // biggest sub-genre in the middle of the fan, the rest alternating outwards; staggered radii so neighbours' labels don't line up
+      subs.forEach((sg, j) => { const slot = j === 0 ? 0 : (j % 2 ? 1 : -1) * Math.ceil(j / 2), sa = a + (k > 1 ? (slot / k) * fan : 0), sr = r * 1.45 + (j % 2) * 55 + 20 * Math.sqrt(sg.count || 1);
+        spos.set(sg.gid, [Math.cos(sa) * sr, Math.sin(sa) * sr]); });
+    });
+    const at = (n) => (n.kind === "macro" ? pos.get(n.gid) : n.kind === "sub" ? spos.get(n.gid) : spos.get(n.genreIds?.[0]) || pos.get(n.macroId)) || [0, 0];
+    const pull = (n) => n.kind === "macro" ? 0.3 : n.kind === "sub" ? 0.08 : n.genreIds?.length ? 0.012 : 0.004;
+    fx = d3.forceX((n) => (n.kind === "root" ? 0 : at(n)[0])).strength(pull);
+    fy = d3.forceY((n) => (n.kind === "root" ? 0 : at(n)[1])).strength(pull);
+    if (instant) for (const n of ns) { if (n.kind === "root") continue; const [ax, ay] = at(n), j = isItem(n) ? 70 : 20; // first load: start everything near home
+      n.x = ax + (hash01(n.id, 3) - 0.5) * j; n.y = ay + (hash01(n.id, 4) - 0.5) * j; n.vx = n.vy = 0; }
   }
   sim.force("x", fx).force("y", fy);
   const root = byId.get("root"); root.fx = mode === "constellation" ? 0 : null; root.fy = mode === "constellation" ? 0 : null;
