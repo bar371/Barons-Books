@@ -6,6 +6,7 @@ const $ = (s) => document.querySelector(s);
 const K = window.KIND; // words, links and sources for this kind of library (kind.js)
 const LOOK = K.look || {}; // per-kind map style (games: a tabletop); books leave it empty and keep the star map
 const SERIF = LOOK.font || "Fraunces, Georgia, serif";
+const THEME_KEY = K.id === "books" ? "theme" : "theme-" + K.id; // each map remembers its own light / dark
 const canvas = $("#stage"), ctx = canvas.getContext("2d");
 const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -33,11 +34,11 @@ function readColors() {
   C = { bg0: g("--bg0"), bg1: g("--bg1"), ink: g("--ink"), muted: g("--muted"), edge: g("--edge"), halo: g("--halo"), light: document.documentElement.dataset.theme === "light" };
 }
 function setTheme(t) {
-  document.documentElement.dataset.theme = t; store.set("theme", t);
+  document.documentElement.dataset.theme = t; store.set(THEME_KEY, t);
   document.querySelector('meta[name="theme-color"]').content = t === "light" ? (LOOK.themeColor?.light || "#f7f2e8") : (LOOK.themeColor?.dark || "#070a14");
   readColors();
 }
-setTheme(store.get("theme") || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
+setTheme(store.get(THEME_KEY) || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"));
 
 /* ---------- color helpers ---------- */
 function rgba(hex, a) {
@@ -562,6 +563,18 @@ function drawBook(n, t, s) {
     haloText(trunc(n.title, 28), n.x, y + h + 5 / k ** 0.7, 12 / Math.max(k, 0.6) ** 0.85, 600, C.ink, "Inter, sans-serif");
 }
 
+// Gentle drift: every star bobs a couple of pixels on its own slow orbit. Drawing-only (positions are shifted just
+// for this frame and put back), so the physics, clicks and the calm crowded clusters are untouched.
+function float(t, on) {
+  if (reduce) return false;
+  for (let i = 0; i < vNodes.length; i++) {
+    const n = vNodes[i]; if (n.kind === "root" || n.fx != null) continue;
+    const amp = isItem(n) ? 2.4 : 1.4, a = t * (0.00045 + (i % 7) * 0.00005) + i * 2.399;
+    const dx = Math.cos(a) * amp, dy = Math.sin(a * 1.3) * amp;
+    if (on) { n.x += dx; n.y += dy; } else { n.x -= dx; n.y -= dy; }
+  }
+  return true;
+}
 function frame(t) {
   requestAnimationFrame(frame);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -573,6 +586,7 @@ function frame(t) {
     const ts = n === selected ? 1.28 : n === hover ? 1.2 : 1; n.s = lerp(n.s, ts, 0.2);
   }
   if (LOOK.table) drawCompass(t);
+  const fl = float(t, true);
   drawLinks(t);
   const top = [];
   for (const n of drawOrder) {
@@ -586,6 +600,7 @@ function frame(t) {
     const s = selected, r = (isItem(s) ? 38 : s.rad + 14) * s.s * (s.sc || 1), p = (t % 1800) / 1800;
     ctx.strokeStyle = rgba(s.color, 0.6 * (1 - p)); ctx.lineWidth = 2 / T.k; ctx.beginPath(); ctx.arc(s.x, s.y, r + p * 26, 0, 6.283); ctx.stroke();
   }
+  if (fl) float(t, false);
   ctx.restore();
 }
 
@@ -594,7 +609,7 @@ const tip = $("#tip");
 canvas.addEventListener("pointerdown", (e) => {
   const [x, y] = d3.pointer(e, canvas), n = pick(x, y);
   press = { x, y, n, moved: false, id: e.pointerId };
-  if (n) { canvas.setPointerCapture(e.pointerId); canvas.classList.add("drag"); const [wx, wy] = T.invert([x, y]); press.ox = n.x - wx; press.oy = n.y - wy; n.fx = n.x; n.fy = n.y; sim.alphaTarget(0.25).restart(); hideTip(); }
+  if (n) { canvas.setPointerCapture(e.pointerId); canvas.classList.add("drag"); const [wx, wy] = T.invert([x, y]); press.ox = n.x - wx; press.oy = n.y - wy; n.fx = n.x; n.fy = n.y; sim.alphaTarget(0.25).alpha(Math.max(sim.alpha(), 0.2)).restart(); hideTip(); } // neighbours react at once, not after a slow warm-up
 });
 canvas.addEventListener("pointermove", (e) => {
   const [x, y] = d3.pointer(e, canvas);
