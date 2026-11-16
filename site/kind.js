@@ -472,8 +472,14 @@
   };
 
   const kinds = { books, games, videogames };
-  const want = new URLSearchParams(location.search).get("kind");
+  // which library: ?kind=... (old links), else the page itself (boardgames.html and videogames.html carry data-kind)
+  const want = new URLSearchParams(location.search).get("kind") || document.documentElement.dataset.kind;
   const K = window.KIND = kinds[want] || books;
+  K.pages = { books: "./", games: "boardgames.html", videogames: "videogames.html" }; // each library has its own page, icon and home-screen shortcut
+  if (K.id !== (document.documentElement.dataset.kind || "books")) { // reached through ?kind= on another library's page: show the right icon at least
+    const set = (sel, href) => { const el = document.querySelector(sel); if (el) el.href = href; };
+    set('link[rel="icon"]', `icons/${K.id}.svg`); set('link[rel="apple-touch-icon"]', `icons/${K.id}-180.png`); set('link[rel="manifest"]', `${K.id}.webmanifest`);
+  }
   for (const [sel, prop, v] of K.dom || []) { const el = document.querySelector(sel); if (el) el[prop] === undefined ? el.setAttribute(prop, v) : (el[prop] = v); }
   if (K.dom) { const q = document.querySelector("#t-queue"), t = q?.parentElement?.lastChild; if (t?.nodeType === 3) t.nodeValue = K.queueToggle || "Wishlist"; }
   document.documentElement.dataset.kind = K.id; // lets style.css theme each kind

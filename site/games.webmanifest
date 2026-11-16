@@ -1,0 +1,29 @@
+{
+ "name": "Baron's Board Games",
+ "short_name": "Board Games",
+ "description": "An interactive map of my board games, the categories they belong to, and what to play next.",
+ "id": "./boardgames.html",
+ "start_url": "./boardgames.html",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#120c08",
+ "theme_color": "#120c08",
+ "icons": [
+  {
+   "src": "icons/games-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "icons/games-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  },
+  {
+   "src": "icons/games-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}

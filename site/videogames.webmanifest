@@ -1,0 +1,29 @@
+{
+ "name": "Baron's Video Games",
+ "short_name": "Video Games",
+ "description": "An interactive map of the video games I've played, their genres, and what to play next.",
+ "id": "./videogames.html",
+ "start_url": "./videogames.html",
+ "scope": "./",
+ "display": "standalone",
+ "background_color": "#07051a",
+ "theme_color": "#07051a",
+ "icons": [
+  {
+   "src": "icons/videogames-192.png",
+   "sizes": "192x192",
+   "type": "image/png"
+  },
+  {
+   "src": "icons/videogames-512.png",
+   "sizes": "512x512",
+   "type": "image/png"
+  },
+  {
+   "src": "icons/videogames-512.png",
+   "sizes": "512x512",
+   "type": "image/png",
+   "purpose": "maskable"
+  }
+ ]
+}

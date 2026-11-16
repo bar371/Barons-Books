@@ -330,7 +330,8 @@
 
   // ---------- account: sign in, switch library, sign out ----------
   const go = (lib) => { const p = new URLSearchParams(location.search); p.delete("edit"); lib ? p.set("lib", lib) : p.delete("lib"); const q = p.toString(); location.href = location.pathname + (q ? "?" + q : ""); };
-  const goKind = (k) => { const p = new URLSearchParams(location.search); p.delete("edit"); p.delete("book"); k === "books" ? p.delete("kind") : p.set("kind", k); const q = p.toString(); location.href = location.pathname + (q ? "?" + q : ""); };
+  const goKind = (k) => { const p = new URLSearchParams(location.search); p.delete("edit"); p.delete("book"); p.delete("kind"); const q = p.toString(); // each library lives on its own page
+    location.href = location.pathname.replace(/[^/]*$/, "") + K.pages[k] + (q ? "?" + q : ""); };
   function mountAccount() {
     const dock = document.querySelector(".dock"); if (!dock || document.querySelector("#b-acct")) return;
     const b = document.createElement("button"); b.id = "b-acct"; const u = window.Cloud?.user;

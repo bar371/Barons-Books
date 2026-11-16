@@ -68,7 +68,7 @@
     },
     // returns "signed-in" when the project doesn't require email confirmation, else "confirm"
     async signUp(name, email, password) {
-      const back = encodeURIComponent(location.origin + location.pathname);
+      const back = encodeURIComponent(location.origin + location.pathname.replace(/[^/]*$/, "")); // the site's main address: the one Supabase allows as a return link
       const r = await call(`/auth/v1/signup?redirect_to=${back}`, { method: "POST", body: JSON.stringify({ email, password, data: { display_name: name } }) });
       if (r?.access_token) { keep(r); profiles = null; return "signed-in"; }
       return "confirm";
