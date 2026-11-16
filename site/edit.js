@@ -206,7 +206,7 @@
   modal.innerHTML = `<div class="card glass add-card"><h2>${E.modalTitle}</h2>
     <input id="ab-q" placeholder="${E.searchPh}" autocomplete="off">
     <p class="ab-hint">Adding several? Ctrl+click (⌘+click on a Mac), or tap ○, to pick more than one, even across searches.</p>
-    ${K.importCSV ? `<p class="ab-import"><label>📥 ${K.importLabel}<input type="file" accept=".csv,text/csv" hidden></label></p>
+    ${K.importCSV ? `<p class="ab-import"><label>📥 ${K.importLabel}<input type="file" accept="${K.importAccept || ".csv,text/csv"}" hidden></label></p>
     ` : ""}<ul id="ab-res" class="ab-res"></ul><div id="ab-basket" hidden></div>
     <div id="ab-form" hidden></div><button class="ab-close" aria-label="Close">✕</button></div>`;
   document.body.appendChild(modal);
@@ -288,29 +288,31 @@
   });
   // ---------- import a collection export (games: BoardGameGeek CSV) ----------
   let imported = [];
+  const sameItem = K.sameItem || ((b, it) => (b.bggId && b.bggId === it.bggId) || tkey(b.title) === tkey(it.title)); // is this imported row already on the map?
   const tkey = (t) => String(t || "").toLowerCase().split(" (")[0].trim();
   modal.querySelector(".ab-import input")?.addEventListener("change", async (e) => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
     abres.innerHTML = ""; basket.hidden = true; abform.hidden = false; abform.innerHTML = `<p class="muted">Reading ${esc(f.name)}…</p>`;
     try { imported = await K.importCSV(await f.text()); }
     catch (x) { abform.innerHTML = `<p class="err">${esc(x.message)}</p>`; return; }
-    const have = (it) => ov.books.find((b) => (b.bggId && b.bggId === it.bggId) || tkey(b.title) === tkey(it.title));
+    const have = (it) => ov.books.find((b) => sameItem(b, it));
     const owned = imported.filter((i) => i.shelf === "read"), wish = imported.filter((i) => i.shelf !== "read"), exps = imported.filter((i) => i.expansion), upd = imported.filter(have);
-    abform.innerHTML = imported.length ? `<p><b>${imported.length}</b> games found: ${owned.filter((i) => i.owned !== false).length} owned${owned.some((i) => i.owned === false) ? `, ${owned.filter((i) => i.owned === false).length} played but not owned` : ""}${exps.length ? ` (${exps.length} of them expansions)` : ""}, ${wish.length} on the wishlist.${upd.length ? ` ${upd.length} already on your map get updated, not doubled.` : ""}</p>
+    abform.innerHTML = imported.length ? `${K.importSummary ? K.importSummary(imported, upd.length) : `<p><b>${imported.length}</b> games found: ${owned.filter((i) => i.owned !== false).length} owned${owned.some((i) => i.owned === false) ? `, ${owned.filter((i) => i.owned === false).length} played but not owned` : ""}${exps.length ? ` (${exps.length} of them expansions)` : ""}, ${wish.length} on the wishlist.${upd.length ? ` ${upd.length} already on your map get updated, not doubled.` : ""}</p>`}
       <div class="ab-many">${imported.slice(0, 60).map((p) => `<div title="${esc(p.title)}">${p.cover ? `<img src="${esc(p.cover)}" alt="">` : `<span class="ph"></span>`}<small>${esc(p.title)}</small></div>`).join("")}</div>
-      <p class="ed-note">Ratings convert from BGG's 10 points to 5 stars. Claude adds categories, missing designers and picks on the next update.</p>
-      <button class="ab-save ab-import-go">Import ${imported.length} games</button>` : `<p class="muted">No owned, played or wishlisted games in that file.</p>`;
+      <p class="ed-note">${K.importNote || "Ratings convert from BGG's 10 points to 5 stars. Claude adds categories, missing designers and picks on the next update."}</p>
+      <button class="ab-save ab-import-go">Import ${imported.length} games</button>` : `<p class="muted">${K.importEmpty || "No owned, played or wishlisted games in that file."}</p>`;
   });
   abform.addEventListener("click", (e) => {
     if (!e.target.closest(".ab-import-go")) return;
     const now = new Date().toISOString();
     for (const it of imported) {
-      const ex = ov.books.find((b) => (b.bggId && b.bggId === it.bggId) || tkey(b.title) === tkey(it.title));
+      const ex = ov.books.find((b) => sameItem(b, it));
       if (ex) { // update what BGG knows better (shelf, your rating, plays, note); fill the rest only where empty
         Object.assign(ex, { shelf: it.shelf, bggId: it.bggId, plays: it.plays, note: it.note ?? ex.note }); if (it.owned === false) ex.owned = false; else delete ex.owned;
         if (it.rating) { ex.rating = it.rating; if (ov.ratings) delete ov.ratings[ex.id]; }
-        for (const k of ["author", "year", "players", "playtime", "weight", "series", "cover", "expansion"]) if (ex[k] == null || ex[k] === "") ex[k] = it[k];
-      } else ov.books.push({ ...it, genres: [], added: now, pending: true });
+        for (const k of ["author", "year", "players", "playtime", "weight", "series", "cover", "expansion", "platforms", "seriesNo", "wikidata"]) if ((ex[k] == null || ex[k] === "") && it[k] != null) ex[k] = it[k];
+        if (it.genres?.length && !ex.genres?.length) { ex.genres = it.genres; delete ex.pending; }
+      } else ov.books.push({ ...it, genres: it.genres || [], added: now, ...(it.genres?.length ? {} : { pending: true }) }); // a list that already carries categories shows up sorted at once
     }
     const n = imported.length; imported = []; closeAdd(); commit(null); setTimeout(() => toast(`Imported ${n} games`), 300);
   });
@@ -375,7 +377,7 @@
     if (!C.user) return loginForm(false);
     const ps = await C.profiles(), me = await C.me();
     acct.innerHTML = `<div class="card glass add-card"><h2>${esc(me?.display_name || C.user.email)}</h2><p class="muted">${esc(C.user.email)}</p>
-      <div class="kinds">${[["books", "📚 Books"], ["games", "🎲 Board games"]].map(([k, l]) => `<button data-kind="${k}" class="${K.id === k ? "on" : ""}">${l}</button>`).join("")}</div>
+      <div class="kinds">${[["books", "📚 Books"], ["games", "🎲 Board games"], ["videogames", "🎮 Video games"]].map(([k, l]) => `<button data-kind="${k}" class="${K.id === k ? "on" : ""}">${l}</button>`).join("")}</div>
       <h4>Libraries</h4><ul class="ab-res libs">${ps.map((p) => `<li data-lib="${esc(p.slug)}" class="${p.slug === ctx.slug ? "on" : ""}"><span><b>${esc(p.display_name)}'s ${K.lib}</b><small>${p.id === me?.id ? "yours" : p.is_public ? "public" : "private"}</small></span></li>`).join("") || `<li class="muted">No libraries yet: run supabase/schema.sql and add profiles</li>`}</ul>
       ${me ? `<button class="ed-del req">Update my picks now</button>` : ""}
       ${me ? `<button class="ed-del vis">${me.is_public ? "Make my map private" : "Make my map public"}</button>` : ""}

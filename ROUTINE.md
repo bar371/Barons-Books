@@ -1,8 +1,8 @@
 # Claude picks routine
 
 You are refreshing recommendations ("picks") for the maps at https://bar371.github.io/Barons-Books/. Each person can have
-two libraries: **books** and **board games** (`?kind=games`). Each todo entry has a `kind`; follow section 2 for books
-and section 2b for games.
+three libraries: **books**, **board games** (`?kind=games`) and **video games** (`?kind=videogames`). Each todo entry
+has a `kind`; follow section 2 for books, section 2b for `games` (board games) and section 2c for `videogames`.
 Each person's library lives in Supabase. Your output goes back to Supabase through `scripts/cloud_sync.py`.
 **Do not commit, push or open pull requests**: nothing in git changes during this routine.
 
@@ -116,22 +116,61 @@ handle games that are new. Do it **after** the first push (the push tells you wh
    - not found after checking 1 or 2 pages: `python3 scripts/cloud_sync.py cover <slug> <key> none <page-url> [<page-url> ...]`
 6. Run `covers` again for the next batch. **Repeat until it prints ALL DONE**, then run the push command again.
 
+## 2c. Video-game libraries (`"kind": "videogames"`)
+
+Read the entry's `snapshot` (`data/cloud/<slug>.videogames.json`). It has the same shape as a book snapshot, where:
+
+- `read` means games they have **played** (with `rating`, and often a `note` in their own words: read it, it says what
+  they liked and disliked), `reading` means **playing now**, and `toRead` means the **backlog**.
+- `author` is the **studio** (developer), `platforms` the systems the game is on, `series` and `seriesNo` its franchise.
+- `taxonomy` holds video-game **genres**.
+- `needDetails` lists games missing a studio or year.
+- `needCover` and `recsNeedCover` list games and earlier picks never searched for a cover picture.
+
+Write `data/cloud/<slug>.videogames.picks.json` in the same format as section 2, with these additions.
+
+**Entries in `books`.** Each can also carry `author` (the developer, e.g. "FromSoftware"), `year` (first release),
+`series` (e.g. "The Witcher") and `platforms` (a list, e.g. `["PlayStation 5", "Microsoft Windows"]`).
+For each id in `needDetails`, fill in what you know reliably and leave out what you don't; never invent details.
+
+**`recs`.** Real, released video games only (nothing unreleased or cancelled). Each rec takes `title`, `author`
+(developer), `year`, `genres`, `because` (ids from `read`), `reason` and `fit`, plus `series` and `platforms`.
+When a name is shared by a remake or reboot, the `year` says which one you mean.
+
+**Size and focus.** Aim for about 1 pick per 2 games in `read`, between 15 and 40 in all.
+
+- Go by what they rate highly and what their notes praise: story, combat, exploration, difficulty, art, length.
+- Never repeat anything in `read`, `reading` or `toRead`, and don't pick a remaster or remake of a game they already
+  played. The next entry of a series they love is welcome if it's well regarded; say so in `reason`.
+- Prefer games playable on platforms they already use (see `platforms` across their library), and say when a pick is not.
+- Low ratings and critical notes are signals against that style of game.
+
+The push command looks up each pick's cover on Wikipedia.
+
+### Covers from the web (video games)
+
+Same worklist as "Box covers from the web" above, with `--videogames` on each command:
+`covers <slug> --videogames`, `cover <slug> <key> <picture-url> --videogames`, and `cover <slug> <key> none <page-url> --videogames`.
+Wikipedia has cover art for most video games, so this is usually a short list or empty. Look for the game's **official
+cover or key art** (publisher or developer site, or its store page on Steam, PlayStation, Xbox or Nintendo): portrait
+cover art if there is one. Not a screenshot, logo or banner of a different game.
+
 ## 3. Save
 
-Run each entry's `push` command: `python3 scripts/cloud_sync.py push <slug>` for books, `... push <slug> --games` for games. It validates the file, finds covers on Open Library and saves.
+Run each entry's `push` command: `python3 scripts/cloud_sync.py push <slug>` for books, `... push <slug> --games` for board games, `... push <slug> --videogames` for video games. It validates the file, finds covers on Open Library and saves.
 A push can take up to about 3 minutes (picture lookups). Run it in the foreground with a 10-minute Bash timeout
 (`timeout: 600000`), not in the background, and wait for its "saved N picks" line. Never finish the run while a push is still going:
 nothing is saved until it prints that line.
 
 Read what it reports as skipped. If many picks were skipped, fix the file and push again.
 
-**Game libraries: the run isn't done until the push prints "covers: all searched".** If it prints "NEXT STEP, required",
+**Game libraries (board and video): the run isn't done until the push prints "covers: all searched".** If it prints "NEXT STEP, required",
 do "Box covers from the web" until `covers` says ALL DONE, then push again.
 
-If you can't finish a library, run `python3 scripts/cloud_sync.py fail <slug>`, adding `--games` for a game library.
+If you can't finish a library, run `python3 scripts/cloud_sync.py fail <slug>`, adding `--games` or `--videogames` for a game library.
 
 ## 4. Catch late requests
 
 Run `python3 scripts/cloud_sync.py pull` once more, without `--all`. If anyone new appears, do steps 2 and 3 for them.
 
-Finish with a short summary: whose library (books or games) got picks, how many, and anything skipped.
+Finish with a short summary: whose library (books, board games or video games) got picks, how many, and anything skipped.

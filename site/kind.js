@@ -1,6 +1,6 @@
 /* Baron's Library: what kind of library this page shows. Everything that is specific to books (words,
    where to search, where to link out, which tables hold the edits) lives here, so the map, scoring and
-   editing code can be shared. ?kind=games switches to board games; books stay the default. */
+   editing code can be shared. ?kind=games is board games, ?kind=videogames video games; books stay the default. */
 (() => {
   const many = (n, one, more) => `${n} ${n === 1 ? one : more}`;
   const ol = (id, size) => `https://covers.openlibrary.org/b/id/${id}-${size}.jpg`;
@@ -97,10 +97,11 @@
   // itself under fair use at low resolution: pilicense=any). Wikidata/Commons pictures are mostly photos of people
   // playing, so those are only used when the file is clearly a box, cover or logo. Results are cached per browser.
   const WP = "https://en.wikipedia.org/w/api.php?format=json&origin=*&action=query";
-  const gkey = (s) => String(s || "").toLowerCase().replace(/\s*\((board |card )?game\)$/, "").replace(/[^a-z0-9]/g, "");
   const isPhoto = (u) => /commons\.wikimedia\.org\/wiki\/Special:FilePath|\/wikipedia\/commons\//.test(u || "");
   const goodArt = (src, name) => src && (/\/wikipedia\/en\//.test(src) || /box|cover|logo/i.test(name || "")) ? src.replace(/\?utm_.*$/, "") : null;
-  const ARTKEY = "bl-art-v1";
+  // One art source per kind: which Wikipedia infobox marks its articles, which title suffix to ignore, where to cache.
+  function artSource({ cacheKey: ARTKEY, template, strip, hint = () => "" }) {
+  const gkey = (s) => String(s || "").toLowerCase().replace(strip, "").replace(/[^a-z0-9]/g, "");
   let artCache = {}; try { artCache = JSON.parse(localStorage.getItem(ARTKEY) || "{}"); } catch {}
   const artKey = (it) => it.bggId ? "b" + it.bggId : /^Q\d+$/.test(it.wikidata || "") ? "q" + it.wikidata : "t" + gkey(it.title);
   const needsArt = (it) => !it.cover || isPhoto(it.cover);
@@ -124,7 +125,7 @@
     }
     for (const it of todo.filter((i) => !wiki.has(artKey(i)))) { // otherwise: search for a game article with that name
       try {
-        const h = (await j(`${WP}&list=search&srlimit=1&srsearch=${encodeURIComponent(it.title + ' hastemplate:"Infobox game"')}`)).query?.search?.[0];
+        const h = (await j(`${WP}&list=search&srlimit=1&srsearch=${encodeURIComponent(it.title + hint(it) + ` hastemplate:"${template}"`)}`)).query?.search?.[0];
         if (h && gkey(h.title) === gkey(it.title)) wiki.set(artKey(it), h.title);
       } catch { failed = true; }
     }
@@ -147,18 +148,31 @@
     try { localStorage.setItem(ARTKEY, JSON.stringify(artCache)); } catch {}
     return out;
   }
+  return { fetchArt, isPhoto, artFor: (it) => needsArt(it) ? artCache[artKey(it)] : undefined };
+  }
+  const boardArt = artSource({ cacheKey: "bl-art-v1", template: "Infobox game", strip: /\s*\((board |card )?game\)$/ });
+  const videoArt = artSource({ cacheKey: "bl-art-vg-v1", template: "Infobox video game", strip: /\s*\((\d{4} )?video game\)$/, hint: (it) => (it.year ? " " + it.year : "") });
+  // categories come from <kind>/taxonomy.json (the picks routine reads the same file); empty ones stay hidden on the map
+  const taxBase = (path) => async () => {
+    const t = await fetch(path, { cache: "no-cache" }).then((r) => r.json()), genres = [];
+    for (const { name, color, subs } of t.groups) {
+      genres.push({ id: name, name, parent: null, color, count: 0 });
+      for (const s of subs) genres.push({ id: s, name: s, parent: name, color, count: 0 });
+    }
+    return { genres, books: [], recs: [], queue: [], meta: { read: 0, queued: 0, recommended: 0 } };
+  };
   const players = (n) => n.players ? (n.players[0] === n.players[1] || !n.players[1] ? `${n.players[0]} players` : `${n.players[0]}–${n.players[1]} players`) : null;
   const gslug = (s) => s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
   const games = {
     id: "games",
-    lib: "Games",
+    lib: "Board Games",
     storeKey: "bl-overlay-games-v1",
     tables: { edits: "game_edits", picks: "game_picks" },
-    png: "barons-games.png",
+    png: "barons-board-games.png",
     box: [40, 40], // square game boxes
     // tabletop look instead of the star map: hex tiles, a hex board, embers and a compass rose (app.js + style.css)
-    look: { table: true, hex: true, font: "Cinzel, Fraunces, Georgia, serif", themeColor: { dark: "#120c08", light: "#efe0bd" } },
+    look: { table: true, poly: [6, Math.PI / 6, 1.1], squareDots: true, font: "Cinzel, Fraunces, Georgia, serif", themeColor: { dark: "#120c08", light: "#efe0bd" } },
     sub: (m) => `${m.read} owned or played · ${m.queued || 0} on the wishlist · ${m.recommended} recommended`,
     items: "games",
     count: (n) => many(n, "game", "games"),
@@ -203,14 +217,7 @@
     },
     // Categories live in games/taxonomy.json (the picks routine reads the same file). Broad on purpose: a 20-game
     // shelf spreads over a few clusters instead of 20 lonely ones. Empty categories stay hidden on the map.
-    async base() {
-      const t = await fetch("games/taxonomy.json", { cache: "no-cache" }).then((r) => r.json()), genres = [];
-      for (const { name, color, subs } of t.groups) {
-        genres.push({ id: name, name, parent: null, color, count: 0 });
-        for (const s of subs) genres.push({ id: s, name: s, parent: name, color, count: 0 });
-      }
-      return { genres, books: [], recs: [], queue: [], meta: { read: 0, queued: 0, recommended: 0 } };
-    },
+    base: taxBase("games/taxonomy.json"),
     async find(s, signal) {
       const w = await fetch(`https://en.wikipedia.org/w/api.php?format=json&origin=*&action=query&generator=search&gsrlimit=8&gsrsearch=${encodeURIComponent(s + ' hastemplate:"Infobox game"')}&prop=pageimages|description|pageprops&piprop=thumbnail|name&pithumbsize=500&pilicense=any&ppprop=wikibase_item`, { signal }).then((r) => r.json());
       const pages = Object.values(w.query?.pages || {}).sort((a, b) => a.index - b.index);
@@ -242,8 +249,9 @@
     },
     // BoardGameGeek collection export (Collection page -> Export, CSV). Read in the browser; nothing is uploaded.
     // box art for games without one (filled in after the map shows; see fetchArt above)
-    artFor: (it) => needsArt(it) ? artCache[artKey(it)] : undefined,
-    isPhoto, fetchArt,
+    ...boardArt, // artFor, isPhoto, fetchArt
+    queueToggle: "Wishlist", noReferrer: true, // publisher sites often refuse pictures shown on other sites
+    fontHref: "https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap", // the tabletop look's display font
     importLabel: "Have a BoardGameGeek collection? Import its CSV export",
     async importCSV(text) {
       const rows = d3.csvParse(text.replace(/^\uFEFF/, ""));
@@ -280,9 +288,9 @@
     },
     // page text outside the scripts (index.html is written for books)
     dom: [
-      ["title", "textContent", "Baron's Games · a board game constellation"],
+      ["title", "textContent", "Baron's Board Games · a board game constellation"],
       ['meta[name="description"]', "content", "An interactive map of my board games, the categories they belong to, and what to play next."],
-      [".brand h1", "innerHTML", "Baron's <em>Games</em>"],
+      [".brand h1", "innerHTML", "Baron's <em>Board Games</em>"],
       ["#q", "placeholder", "Search games, designers, categories…"],
       ["#stage", "aria-label", "Interactive map of board games and categories"],
       ["#loader p", "textContent", "Setting up the table…"],
@@ -300,12 +308,143 @@
     ],
   };
 
-  const kinds = { books, games };
+  // ---------- video games ----------
+  // Same map, own words. Lookups use Wikipedia's video game articles (cover art in the infobox) + Wikidata
+  // (developer, platforms, series, year). A library usually starts from a list file (see importCSV below).
+  const VG_STRIP = / \((\d{4} )?video game\)$/;
+  const firstYear = (c) => { const ys = (c?.P577 || []).map((x) => parseInt(x.mainsnak?.datavalue?.value?.time?.slice(1, 5))).filter(Boolean); return ys.length ? Math.min(...ys) : null; };
+  const plats = (n) => Array.isArray(n.platforms) && n.platforms.length ? n.platforms.slice(0, 3).join(", ") + (n.platforms.length > 3 ? ` +${n.platforms.length - 3}` : "") : null;
+  const videogames = {
+    id: "videogames",
+    lib: "Video Games",
+    storeKey: "bl-overlay-videogames-v1",
+    tables: { edits: "videogame_edits", picks: "videogame_picks" },
+    png: "barons-video-games.png",
+    box: [36, 48], // portrait game covers
+    // arcade look: a neon grid floor, pixel dust, scanlines and a HUD reticle (app.js + style.css)
+    look: { arcade: true, poly: [8, Math.PI / 8, 1.06], squareDots: true, font: '"Chakra Petch", Inter, sans-serif', themeColor: { dark: "#07051a", light: "#e4e1f4" } },
+    fontHref: "https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&display=swap",
+    queueToggle: "Backlog", noReferrer: true,
+    sub: (m) => `${m.read} played · ${m.queued || 0} in the backlog · ${m.recommended} recommended`,
+    items: "games",
+    count: (n) => many(n, "game", "games"),
+    Genres: "Genres",
+    tipReading: "▶ Playing right now",
+    tipQueue: (rank, N, score) => rank ? `🕹 Backlog #${rank} of ${N} · ${score}%` : "🕹 In my backlog",
+    kindLabel: { rec: "✦ Recommended", reading: "▶ Playing now", queue: "🕹 Backlog", read: "Played" },
+    coverAlt: "Cover of",
+    facts: (n, isRec, esc) => [n.series && n.series !== n.title && `${esc(n.series)}${n.seriesNo ? " #" + n.seriesNo : ""}`, n.year, plats(n) && esc(plats(n)), n.hours && `${n.hours} h`],
+    because: "Because I played",
+    siblings: (hasSeries) => hasSeries ? "In this series / by this studio" : "More by this studio",
+    link: (n) => /^Q\d+$/.test(n.wikidata || "") ? `https://www.wikidata.org/wiki/Special:GoToLinkedPage/enwiki/${n.wikidata}` : `https://en.wikipedia.org/w/index.php?search=${encodeURIComponent(n.title + " video game")}`,
+    linkLabel: (isRec) => `${isRec ? "Find on" : "Open on"} Wikipedia ↗`,
+    copyLink: "🔗 Copy link to this game",
+    ofQueue: "in the backlog",
+    queueHead: "Play next",
+    recTier1: "Play this next",
+    creatorBar: "Studio",
+    creatorNote: (avg, n) => `${avg}★ avg of ${n} played`,
+    newCreator: "new studio",
+    seriesYes: "continues a series", seriesNo: "standalone / new",
+    linkedAvg: "★ avg of linked games",
+    linksNote: (n) => `${n} of your games`,
+    overviewBy: "Every game I've played, and what to play next.",
+    tileRead: "Games played",
+    tile3: { label: "Studios", value: (bs) => new Set(bs.map((b) => b.author).filter(Boolean)).size },
+    perYear: "Played per year",
+    topCreators: "Favourite studios",
+    key: { read: "Played", reading: "Playing now", queue: "Backlog" },
+    hint: "Click anything to dive in. Recommendations are linked to the games that inspired them.",
+    tag: { reading: "▶ playing", queue: "backlog", read: "played" },
+    addRowNote: "Look it up and add it to your library",
+    ed: {
+      genre: "genre", Genre: "Genre",
+      addOne: "＋ Add a game", dockAdd: "＋ Game", dockAddTitle: "Add a game",
+      modalTitle: "Add a game", searchPh: "Search by game name…", noMatches: "No matches",
+      removeOne: "Remove this game", next: (n) => `Continue with ${many(n, "game", "games")} →`,
+      shelves: [["read", "Played"], ["to-read", "Backlog"], ["reading", "Playing now"]],
+      addMany: (n) => `Add ${n} games`, added: (n) => `Added ${n} games`,
+      pending: "Added by you · Claude fills in the details & picks on the next update",
+      signupBlurb: "Map the games you've played: add them, build genres, and get picks. You'll stay signed in on this device.",
+    },
+    base: taxBase("videogames/taxonomy.json"),
+    async find(s, signal) {
+      const w = await fetch(`${WP}&generator=search&gsrlimit=8&gsrsearch=${encodeURIComponent(s + ' hastemplate:"Infobox video game"')}&prop=pageimages|description|pageprops&piprop=thumbnail|name&pithumbsize=500&pilicense=any&ppprop=wikibase_item`, { signal }).then((r) => r.json());
+      const pages = Object.values(w.query?.pages || {}).sort((a, b) => a.index - b.index);
+      const qids = pages.map((p) => p.pageprops?.wikibase_item).filter(Boolean);
+      let ents = {}; const names = {};
+      const studio = (c) => [ids(c, "P178"), ids(c, "P123")].find((a) => a.length) || []; // developer, else publisher
+      if (qids.length) {
+        ents = (await fetch(`${WD}&props=claims&ids=${qids.join("|")}`, { signal }).then((r) => r.json())).entities || {};
+        const more = [...new Set(Object.values(ents).flatMap((e) => [...studio(e.claims), ...ids(e.claims, "P179"), ...ids(e.claims, "P400").slice(0, 6)]))];
+        for (let i = 0; i < more.length && i < 150; i += 50) { // the API answers 50 ids at a time
+          const ls = (await fetch(`${WD}&props=labels&languages=en&ids=${more.slice(i, i + 50).join("|")}`, { signal }).then((r) => r.json())).entities || {};
+          for (const [k, e] of Object.entries(ls)) names[k] = e.labels?.en?.value;
+        }
+      }
+      const out = pages.map((p) => {
+        const q = p.pageprops?.wikibase_item, c = ents[q]?.claims, year = firstYear(c) || +(p.title.match(/\((\d{4}) video game\)$/)?.[1] || 0) || null;
+        const studios = studio(c).map((x) => names[x]).filter(Boolean).slice(0, 2), series = ids(c, "P179").map((x) => names[x]).filter(Boolean)[0] || null;
+        const platforms = ids(c, "P400").slice(0, 6).map((x) => names[x]).filter(Boolean), title = p.title.replace(VG_STRIP, "");
+        const art = goodArt(p.thumbnail?.source, p.pageimage);
+        return { key: q || "wp-" + p.pageid, title, creator: studios.join(" & "),
+          small: [studios.join(", ") || p.description, year].filter(Boolean).join(" · "), thumb: art, big: art,
+          make: () => ({ id: q ? "wd-" + q : "vg-" + gslug(p.title), wikidata: q || null, title, author: studios.join(" & "), year, platforms: platforms.length ? platforms : null, series, cover: art }) };
+      });
+      out.push({ key: "typed:" + gslug(s), title: s, creator: "", small: "Add it as typed: Claude fills in the details", thumb: null, big: null,
+        make: () => ({ id: "vg-" + gslug(s), title: s, author: "", year: null, platforms: null, series: null, cover: null }) });
+      return out;
+    },
+    ...videoArt, // artFor, isPhoto, fetchArt
+    // A list file: { "kind": "videogames", "items": [{ title, year, author, platforms, series, seriesNo, rating, shelf, genres, cover, wikidata }] }.
+    // Claude writes one from a list of games you name; importing it fills the map in one go. Read in the browser only.
+    importLabel: "Have a games list file? Import it",
+    importAccept: ".json,application/json",
+    importNote: "Ratings and genres come from the file; change anything afterwards in edit mode. Claude adds picks on the next update.",
+    importEmpty: "No games in that file.",
+    sameItem: (b, it) => b.id === it.id || (b.wikidata && b.wikidata === it.wikidata) || (String(b.title || "").toLowerCase() === String(it.title || "").toLowerCase() && (!b.year || !it.year || b.year === it.year)), // remakes share a name: the year tells them apart
+    importSummary: (items, updates) => { const c = (sh) => items.filter((i) => i.shelf === sh).length;
+      return `<p><b>${items.length}</b> games found: ${c("read")} played${c("reading") ? `, ${c("reading")} playing now` : ""}${c("to-read") ? `, ${c("to-read")} for the backlog` : ""}.${updates ? ` ${updates} already on your map get updated, not doubled.` : ""}</p>`; },
+    async importCSV(text) {
+      let j; try { j = JSON.parse(text.replace(/^﻿/, "")); } catch { throw new Error("That file isn't a games list (it should be a .json file)"); }
+      if (j?.kind !== "videogames" || !Array.isArray(j.items)) throw new Error("That file doesn't look like a video games list");
+      const int = (v) => { const x = parseInt(v, 10); return x > 0 ? x : null; }, seen = new Set(), items = [];
+      for (const r of j.items) {
+        const title = String(r.title || "").trim(); if (!title) continue;
+        const year = int(r.year), wikidata = /^Q\d+$/.test(r.wikidata || "") ? r.wikidata : null, id = wikidata ? "wd-" + wikidata : "vg-" + gslug(title + (year ? " " + year : ""));
+        if (seen.has(id)) continue; seen.add(id);
+        const shelf = ["read", "to-read", "reading"].includes(r.shelf) ? r.shelf : "read", stars = int(r.rating);
+        items.push({ id, wikidata, title, author: String(r.author || ""), year, platforms: Array.isArray(r.platforms) && r.platforms.length ? r.platforms.map(String).slice(0, 8) : null,
+          series: r.series ? String(r.series) : null, ...(int(r.seriesNo) ? { seriesNo: int(r.seriesNo) } : {}), rating: shelf === "read" && stars ? Math.min(5, stars) : null, shelf,
+          note: r.note ? String(r.note) : null, genres: Array.isArray(r.genres) ? r.genres.map(String).slice(0, 3) : [], cover: /^https:\/\//.test(r.cover || "") ? r.cover : null });
+      }
+      return items;
+    },
+    dom: [
+      ["title", "textContent", "Baron's Video Games · a video game constellation"],
+      ['meta[name="description"]', "content", "An interactive map of the video games I've played, their genres, and what to play next."],
+      [".brand h1", "innerHTML", "Baron's <em>Video Games</em>"],
+      ["#q", "placeholder", "Search games, studios, genres…"],
+      ["#stage", "aria-label", "Interactive map of video games and genres"],
+      ["#loader p", "textContent", "Press start…"],
+      ["label:has(#t-recs)", "title", "Show recommended games (R)"],
+      ["label:has(#t-queue)", "title", "Show my backlog and what I'm playing now (Q)"],
+      ["#help ul", "innerHTML", `<li><b>Scroll / pinch</b> zoom · <b>drag</b> pan · drag a game to move it</li>
+      <li><b>Hover</b> a game to light up everything it touches</li>
+      <li><b>Click</b> to open details · <b>Esc</b> to clear</li>
+      <li><b>Click a genre</b> in the legend to isolate it</li>
+      <li><kbd>/</kbd> search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> layouts · <kbd>R</kbd> recommendations</li>
+      <li><kbd>Q</kbd> backlog · <kbd>T</kbd> titles · <kbd>S</kbd> surprise me · <kbd>D</kbd> theme · <kbd>0</kbd> fit</li>`],
+      ["#help p.muted", "textContent", "Solid frames are games I've played. Dotted frames with a ribbon are in my backlog, and a golden marching frame is what I'm playing right now. Dashed, softly pulsing frames are recommendations, tied by a dashed line to the games that inspired them. The better the match, the bigger and brighter the pick and the faster its lane; the top 10 wear a numbered medal."],
+    ],
+  };
+
+  const kinds = { books, games, videogames };
   const want = new URLSearchParams(location.search).get("kind");
   const K = window.KIND = kinds[want] || books;
   for (const [sel, prop, v] of K.dom || []) { const el = document.querySelector(sel); if (el) el[prop] === undefined ? el.setAttribute(prop, v) : (el[prop] = v); }
-  if (K.dom) { const q = document.querySelector("#t-queue"), t = q?.parentElement?.lastChild; if (t?.nodeType === 3) t.nodeValue = "Wishlist"; }
+  if (K.dom) { const q = document.querySelector("#t-queue"), t = q?.parentElement?.lastChild; if (t?.nodeType === 3) t.nodeValue = K.queueToggle || "Wishlist"; }
   document.documentElement.dataset.kind = K.id; // lets style.css theme each kind
-  if (K.id === "games") document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&display=swap" })); // the tabletop look's display font
-  if (K.id === "games") document.head.append(Object.assign(document.createElement("meta"), { name: "referrer", content: "no-referrer" })); // publisher sites often refuse pictures shown on other sites
+  if (K.fontHref) document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: K.fontHref })); // the look's display font
+  if (K.noReferrer) document.head.append(Object.assign(document.createElement("meta"), { name: "referrer", content: "no-referrer" }));
 })();

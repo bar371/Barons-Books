@@ -4,7 +4,7 @@
 "use strict";
 const $ = (s) => document.querySelector(s);
 const K = window.KIND; // words, links and sources for this kind of library (kind.js)
-const LOOK = K.look || {}; // per-kind map style (games: a tabletop); books leave it empty and keep the star map
+const LOOK = K.look || {}; // per-kind map style (board games: a tabletop, video games: an arcade); books leave it empty and keep the star map
 const SERIF = LOOK.font || "Fraunces, Georgia, serif";
 const THEME_KEY = "theme-" + K.id; // each map remembers its own light / dark (the old shared "theme" key is ignored: games' parchment had switched books to light)
 const canvas = $("#stage"), ctx = canvas.getContext("2d");
@@ -38,7 +38,7 @@ function setTheme(t) {
   document.querySelector('meta[name="theme-color"]').content = t === "light" ? (LOOK.themeColor?.light || "#f7f2e8") : (LOOK.themeColor?.dark || "#070a14");
   readColors();
 }
-setTheme(store.get(THEME_KEY) || (K.id === "books" ? "dark" : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")); // books open in space unless you chose light
+setTheme(store.get(THEME_KEY) || (K.id !== "games" ? "dark" : matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark")); // books open in space unless you chose light
 
 /* ---------- color helpers ---------- */
 function rgba(hex, a) {
@@ -329,6 +329,7 @@ function initStars() {
 }
 function drawBackground(t) {
   if (LOOK.table) return drawTable(t);
+  if (LOOK.arcade) return drawArcade(t);
   const g = ctx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.45, Math.max(W, H) * 0.8);
   g.addColorStop(0, C.bg1); g.addColorStop(1, C.bg0);
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
@@ -350,9 +351,9 @@ function drawBackground(t) {
 }
 
 /* ---------- tabletop look (games) ---------- */
-function hexPath(x, y, r) { // pointy-top hexagon, like a board tile
+function polyPath(x, y, r, sides, rot) { // hexagon = a board tile, octagon = an arcade button
   ctx.beginPath();
-  for (let i = 0; i < 6; i++) { const a = Math.PI / 6 + (i * Math.PI) / 3; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  for (let i = 0; i < sides; i++) { const a = rot + (i * Math.PI * 2) / sides; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
   ctx.closePath();
 }
 let hexPat = null, hexPatLight = null;
@@ -409,6 +410,67 @@ function drawCompass(t) { // a faint compass rose under the map's centre, like a
   }
   ctx.fillStyle = `rgba(${col},.22)`; ctx.font = `700 ${22}px ${SERIF}`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText("N", 0, -R - 18);
+  ctx.restore();
+}
+
+/* ---------- arcade look (video games) ---------- */
+let scanPat = null, scanLight = null;
+function scanPattern() { // CRT scanlines: one faint dark line every 3px
+  if (scanPat && scanLight === C.light) return scanPat;
+  const c = document.createElement("canvas"); c.width = 4; c.height = 3; const g = c.getContext("2d");
+  g.fillStyle = C.light ? "rgba(40,30,90,.035)" : "rgba(0,0,0,.2)"; g.fillRect(0, 2, 4, 1);
+  scanLight = C.light; return (scanPat = ctx.createPattern(c, "repeat"));
+}
+function drawArcade(t) {
+  const g = ctx.createRadialGradient(W * 0.5, H * 0.4, 0, W * 0.5, H * 0.4, Math.max(W, H) * 0.85);
+  g.addColorStop(0, C.bg1); g.addColorStop(1, C.bg0);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // colour washes tinted by the genres
+  const gs = data.genres.filter((x) => !x.parent).slice(0, 4);
+  gs.forEach((ge, i) => {
+    const a = t * 0.00004 * (i + 1) + i * 1.7, px = W * (0.5 + 0.38 * Math.cos(a)) + T.x * 0.05, py = H * (0.45 + 0.3 * Math.sin(a * 1.3)) + T.y * 0.05, r = Math.max(W, H) * 0.4;
+    const ng = ctx.createRadialGradient(px, py, 0, px, py, r);
+    ng.addColorStop(0, rgba(ge.color, C.light ? 0.1 : 0.08)); ng.addColorStop(1, rgba(ge.color, 0));
+    ctx.fillStyle = ng; ctx.fillRect(0, 0, W, H);
+  });
+  // neon grid floor running to a horizon; the lines roll towards you
+  const hz = H * 0.58, vx = W * 0.5 + clamp(T.x * 0.02, -60, 60), a1 = C.light ? "106,61,240" : "61,240,255", a2 = C.light ? "214,51,132" : "255,61,220";
+  const fl = ctx.createLinearGradient(0, hz, 0, H); fl.addColorStop(0, `rgba(${a2},0)`); fl.addColorStop(0.25, `rgba(${a2},${C.light ? 0.2 : 0.24})`); fl.addColorStop(1, `rgba(${a1},${C.light ? 0.26 : 0.34})`);
+  ctx.strokeStyle = fl; ctx.lineWidth = 1; ctx.beginPath();
+  for (let i = -16; i <= 16; i++) { ctx.moveTo(vx + i * 18, hz); ctx.lineTo(vx + i * W * 0.16, H); }
+  const roll = reduce ? 0 : (t * 0.00012) % 1;
+  for (let i = 0; i < 12; i++) { const u = (i + roll) / 12, y = hz + (H - hz) * u * u; ctx.moveTo(0, y); ctx.lineTo(W, y); }
+  ctx.stroke();
+  const hg = ctx.createLinearGradient(0, hz - 70, 0, hz + 8); hg.addColorStop(0, `rgba(${a2},0)`); hg.addColorStop(1, `rgba(${a2},${C.light ? 0.1 : 0.16})`); // glow on the horizon
+  ctx.fillStyle = hg; ctx.fillRect(0, hz - 70, W, 78);
+  // pixel dust: little squares on a pixel grid, drifting up and blinking
+  for (let i = 0; i < 120; i++) {
+    const s = stars[i], span = H * 1.3;
+    const x = (((s.x * W * 1.3 + T.x * s.z * 0.12) % (W * 1.3)) + W * 1.3) % (W * 1.3) - W * 0.15;
+    const y = (((s.y * span + T.y * s.z * 0.12 - (reduce ? 0 : t * 0.008 * s.z)) % span) + span) % span - H * 0.15;
+    const on = reduce ? 0.7 : Math.sin(t * 0.002 * s.z + s.p * 5) > -0.3 ? 1 : 0.25, px = s.z > 0.7 ? 3 : 2;
+    ctx.fillStyle = C.light ? `rgba(${i % 3 ? a1 : a2},${0.3 * s.z * on})` : `rgba(${i % 3 ? "190,200,255" : i % 2 ? a1 : a2},${0.7 * s.z * on})`;
+    ctx.fillRect(Math.round(x / 3) * 3, Math.round(y / 3) * 3, px, px);
+  }
+  ctx.fillStyle = scanPattern(); ctx.fillRect(0, 0, W, H);
+  const v = ctx.createRadialGradient(W * 0.5, H * 0.5, Math.min(W, H) * 0.35, W * 0.5, H * 0.5, Math.max(W, H) * 0.75); // tube vignette
+  v.addColorStop(0, "rgba(0,0,0,0)"); v.addColorStop(1, C.light ? "rgba(60,40,140,.16)" : "rgba(0,0,0,.55)");
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
+}
+function drawReticle(t) { // a HUD target ring around the map's centre
+  const root = byId.get("root"); if (!root || mode !== "constellation") return;
+  const R = 230, col = C.light ? "106,61,240" : "61,240,255", k = T.k, spin = reduce ? 0 : t * 0.00008;
+  ctx.save(); ctx.translate(root.x, root.y); ctx.lineWidth = 1.4 / k; ctx.strokeStyle = `rgba(${col},.2)`;
+  ctx.setLineDash([2, 10]); ctx.beginPath(); ctx.arc(0, 0, R, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
+  ctx.save(); ctx.rotate(spin); // four arcs turning slowly one way...
+  for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc(0, 0, R * 0.9, i * 1.5708 + 0.25, i * 1.5708 + 1.32); ctx.stroke(); }
+  ctx.restore(); ctx.save(); ctx.rotate(-spin * 1.6); ctx.strokeStyle = `rgba(${col},.14)`; // ...and three the other way
+  for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(0, 0, R * 0.5, i * 2.0944 + 0.3, i * 2.0944 + 1.6); ctx.stroke(); }
+  ctx.restore(); ctx.strokeStyle = `rgba(${col},.26)`; ctx.lineWidth = 2 / k;
+  for (let i = 0; i < 4; i++) { // corner brackets
+    const sx = i % 2 ? 1 : -1, sy = i < 2 ? -1 : 1, c = R * 1.08, l = 26;
+    ctx.beginPath(); ctx.moveTo(sx * c, sy * (c - l)); ctx.lineTo(sx * c, sy * c); ctx.lineTo(sx * (c - l), sy * c); ctx.stroke();
+  }
   ctx.restore();
 }
 
@@ -491,7 +553,7 @@ function drawGenre(n, t, s) {
   ctx.fillStyle = g; ctx.beginPath(); ctx.arc(n.x, n.y, r * 3.4, 0, 6.283); ctx.fill();
   const body = ctx.createRadialGradient(n.x - r * 0.3, n.y - r * 0.35, r * 0.1, n.x, n.y, r);
   body.addColorStop(0, shade(n.color, 0.55)); body.addColorStop(1, shade(n.color, n.kind === "root" ? -0.1 : -0.35));
-  ctx.globalAlpha = n.a; ctx.fillStyle = body; LOOK.hex ? hexPath(n.x, n.y, r * 1.1) : (ctx.beginPath(), ctx.arc(n.x, n.y, r, 0, 6.283)); ctx.fill();
+  ctx.globalAlpha = n.a; ctx.fillStyle = body; LOOK.poly ? polyPath(n.x, n.y, r * LOOK.poly[2], LOOK.poly[0], LOOK.poly[1]) : (ctx.beginPath(), ctx.arc(n.x, n.y, r, 0, 6.283)); ctx.fill();
   ctx.lineWidth = 1.5 / k ** 0.5; ctx.strokeStyle = rgba("#ffffff", 0.45); ctx.stroke();
   if (n.kind === "root") { // orbiting ring
     ctx.strokeStyle = rgba(n.color, 0.5 * n.a); ctx.setLineDash([3, 7]); ctx.lineDashOffset = -t * 0.01; ctx.beginPath(); ctx.arc(n.x, n.y, r * 1.35, 0, 6.283); ctx.stroke(); ctx.setLineDash([]);
@@ -538,7 +600,7 @@ function drawBook(n, t, s) {
   if (sx < -mg || sx > W + mg || sy < -mg || sy > H + mg) return; // off-screen: skip
   const lit = n === (hover || selected);
   if (w * k < 9) { // far away: a plain star
-    ctx.globalAlpha = n.a; ctx.fillStyle = n.color; ctx.beginPath(); LOOK.hex ? ctx.roundRect(n.x - 5 * n.sc * s, n.y - 5 * n.sc * s, 10 * n.sc * s, 10 * n.sc * s, 2 * s) : ctx.arc(n.x, n.y, 5.5 * n.sc * s, 0, 6.283); ctx.fill();
+    ctx.globalAlpha = n.a; ctx.fillStyle = n.color; ctx.beginPath(); LOOK.squareDots ? ctx.roundRect(n.x - 5 * n.sc * s, n.y - 5 * n.sc * s, 10 * n.sc * s, 10 * n.sc * s, 2 * s) : ctx.arc(n.x, n.y, 5.5 * n.sc * s, 0, 6.283); ctx.fill();
     if (isRec || isQ) { ctx.setLineDash(isRec ? [2, 2] : [1, 2]); ctx.strokeStyle = reading ? "#ffd43b" : n.color; ctx.lineWidth = 1 / k; ctx.beginPath(); ctx.arc(n.x, n.y, 9 * s, 0, 6.283); ctx.stroke(); ctx.setLineDash([]); }
     ctx.globalAlpha = 1; return;
   }
@@ -608,6 +670,7 @@ function frame(t) {
     const ts = n === selected ? 1.28 : n === hover ? 1.2 : 1; n.s = lerp(n.s, ts, 0.2);
   }
   if (LOOK.table) drawCompass(t);
+  if (LOOK.arcade) drawReticle(t);
   const fl = float(t, true);
   drawLinks(t);
   const top = [];

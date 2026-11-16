@@ -235,6 +235,31 @@ kbd{font:500 11px var(--ui);padding:1px 6px;border:1px solid var(--line);border-
 
 .ab-import{margin:6px 0 2px;font-size:13px} .ab-import label{cursor:pointer;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
 .blurb.mynote{font-style:italic}
+/* video games (?kind=videogames): a neon arcade (dark) or a pale handheld-console lilac (light) */
+:root[data-kind="videogames"]{
+  --bg0:#07051a; --bg1:#1b1348; --ink:#eef0ff; --muted:#9d99cc; --line:rgba(160,150,255,.15);
+  --panel:rgba(15,10,40,.74); --panel-solid:#130d33; --accent:#3df0ff; --accent-ink:#03131a;
+  --shadow:0 10px 40px rgba(0,0,0,.55),0 0 0 1px rgba(61,240,255,.06); --edge:170,160,255; --halo:7,5,26;
+  --display:"Chakra Petch","Inter",system-ui,sans-serif;
+}
+:root[data-kind="videogames"][data-theme="light"]{
+  --bg0:#e4e1f4; --bg1:#f8f7fe; --ink:#1b1638; --muted:#6b6690; --line:rgba(40,30,90,.13);
+  --panel:rgba(250,249,255,.82); --panel-solid:#fbfaff; --accent:#6a3df0; --accent-ink:#fff;
+  --shadow:0 10px 36px rgba(50,35,120,.2); --edge:60,50,120; --halo:248,247,254;
+}
+:root[data-kind="videogames"] .glass{border-radius:10px;border-color:color-mix(in srgb,var(--accent) 26%,transparent)}
+:root[data-kind="videogames"] .search{border-radius:10px}
+:root[data-kind="videogames"] .brand h1{text-transform:uppercase;letter-spacing:.06em;font-size:19px}
+:root[data-kind="videogames"] .brand h1 em{font-style:normal;text-shadow:0 0 14px color-mix(in srgb,var(--accent) 55%,transparent)}
+:root[data-kind="videogames"] .panel h2,:root[data-kind="videogames"] .modal h2{letter-spacing:.01em}
+:root[data-kind="videogames"] .modes button,:root[data-kind="videogames"] .dock button,:root[data-kind="videogames"] .tile,:root[data-kind="videogames"] .macro{border-radius:6px}
+:root[data-kind="videogames"] .loader-star{clip-path:none;border-radius:0;background:var(--accent);filter:drop-shadow(0 0 12px var(--accent));animation:blink 1s steps(2,jump-none) infinite}
+:root[data-kind="videogames"] #loader{font-family:var(--display);text-transform:uppercase;letter-spacing:.2em}
+:root[data-kind="videogames"] .macro i{border-radius:2px;box-shadow:0 0 8px var(--c)}
+:root[data-kind="videogames"] .why{font-family:var(--ui)}
+@keyframes blink{50%{opacity:.15}}
+@media (max-width:900px){:root[data-kind="videogames"] .brand h1{font-size:13px}}
+@media (max-width:480px){:root[data-kind="videogames"] .brand h1{font-size:11.5px;letter-spacing:.03em}}
 /* tabletop details for board games */
 :root[data-kind="games"] .loader-star{background:var(--accent);clip-path:polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%);filter:drop-shadow(0 0 12px var(--accent))}
 :root[data-kind="games"] .macro i{border-radius:0;clip-path:polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%);box-shadow:none;width:12px;height:13px}
