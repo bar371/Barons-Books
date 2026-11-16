@@ -20,6 +20,11 @@ let W = 0, H = 0, DPR = 1, T = d3.zoomIdentity;
 let data, nodes = [], links = [], byId = new Map(), adj = new Map(), genreNodes = new Map();
 let vNodes = [], vLinks = [], drawOrder = [];
 let mode = "constellation", showRecs = true, alwaysLabels = false;
+// Each view has three layouts to choose from (the ▦ button in the dock, or L). The first of each is the original.
+const LAYOUTS = { constellation: ["Fan", "Orbits", "Tree"], clusters: ["Ring", "Grid", "Packed"], timeline: ["By genre", "By rating", "One stream"] };
+let layoutVar = { constellation: 0, clusters: 0, timeline: 0 };
+try { Object.assign(layoutVar, JSON.parse(localStorage.getItem("layout-" + window.KIND.id) || "{}")); } catch {}
+for (const k in LAYOUTS) if (!(layoutVar[k] >= 0 && layoutVar[k] < 3)) layoutVar[k] = 0;
 let hover = null, selected = null, focusGenre = null, searchSet = null, press = null;
 let sim, zoom, timeline = null, C = {}, stars = [];
 const imgs = new Map();
@@ -171,7 +176,8 @@ function applyLayout(alpha = 0.9, instant = false) {
   drawOrder = [...ns].sort((a, b) => rank[a.kind] - rank[b.kind]);
 
   const m = nodes.filter((n) => n.kind === "macro" && ns.includes(n));
-  const cl = mode === "clusters", tl = mode === "timeline";
+  const cl = mode === "clusters", tl = mode === "timeline", v = layoutVar[mode] || 0;
+  const placed = !cl && !tl && v > 0; // Orbits / Tree put every hub on its own spot: the tree springs only keep things tidy
   const L = ls.map((l) => ({ source: l.s, target: l.t, type: l.type, primary: l.primary }));
   // Crowded sub-genres: a fixed short, stiff spring per book can't fit 40+ books around one hub, so springs and
   // collisions fight and the cluster churns. Past CROWD books, springs get longer (room for a wider disc) and
@@ -180,7 +186,7 @@ function applyLayout(alpha = 0.9, instant = false) {
   for (const l of L) if (l.type === "genre" && l.primary) crowd.set(l.source, (crowd.get(l.source) || 0) + 1);
   const busy = (l) => Math.max(1, (crowd.get(l.source) || 0) / CROWD), maxBusy = Math.max(1, ...[...crowd.values()].map((k) => k / CROWD));
   const dist = (l) => l.type === "tree" ? (l.source.kind === "root" ? (cl ? 175 : 300) : cl ? 125 : 170) : l.type === "genre" ? (l.primary ? (cl ? 95 : 70) * Math.sqrt(busy(l)) : 150) : l.type === "series" ? 48 : 125;
-  const str = (l) => tl ? (l.type === "series" ? 0.04 : 0) : l.type === "tree" ? (cl ? 0.85 : 0.35) : l.type === "genre" ? (l.primary ? (cl ? 0.9 : 0.55) / busy(l) : cl ? 0.04 : 0.07) : l.type === "series" ? 0.5 : 0.07;
+  const str = (l) => tl ? (l.type === "series" ? 0.04 : 0) : l.type === "tree" ? (cl ? 0.85 : placed ? 0.03 : 0.35) : l.type === "genre" ? (l.primary ? (cl ? 0.9 : 0.55) / busy(l) : cl ? 0.04 : 0.07) : l.type === "series" ? 0.5 : 0.07;
   sim.velocityDecay(tl ? 0.28 : Math.min(0.35, 0.28 + 0.02 * (maxBusy - 1))); // a touch more friction when anything is crowded
   sim.nodes(ns).force("link", d3.forceLink(L).distance(dist).strength(str))
     .force("charge", d3.forceManyBody().strength((n) => tl ? -20 : n.kind === "root" ? -1100 : n.kind === "macro" ? -800 : n.kind === "sub" ? (cl ? -520 : -300) : cl ? -150 : -110).distanceMax(520))
@@ -188,10 +194,22 @@ function applyLayout(alpha = 0.9, instant = false) {
 
   let fx = null, fy = null;
   if (cl) {
-    const R = Math.max(300, 135 * m.length), anchor = new Map(m.map((g, i) => { const a = -Math.PI / 2 + (i / m.length) * Math.PI * 2; return [g.gid, [Math.cos(a) * R, Math.sin(a) * R]]; }));
+    // Each genre gets room for what it holds (a big genre used to crowd its small neighbours into the middle), and
+    // sub-genres and items are held firmly enough to stay with their own genre.
+    const size = (g) => 70 + 24 * Math.sqrt(g.count || 1), tot = d3.sum(m, size) || 1, anchor = new Map(); // rough radius a genre's cluster needs
+    const bySize = [...m].sort((a, b) => b.count - a.count || (a.gid < b.gid ? -1 : 1));
+    if (v === 1) { // grid: biggest first, row by row
+      const cols = Math.ceil(Math.sqrt(bySize.length)), rows = Math.ceil(bySize.length / cols), cell = 2 * size(bySize[0] || {}) + 110;
+      bySize.forEach((g, i) => anchor.set(g.gid, [((i % cols) - (cols - 1) / 2) * cell, (Math.floor(i / cols) - (rows - 1) / 2) * cell]));
+    } else if (v === 2) { // packed: bubbles touching, the biggest in the middle
+      d3.packSiblings(bySize.map((g) => ({ r: size(g) * 1.3 + 40, g }))).forEach((c) => anchor.set(c.g.gid, [c.x, c.y]));
+    } else { // ring: a slice of the circle per genre, sized by what it holds
+      const R = Math.max(300, (tot / Math.PI) * 1.5); /* the ring grows with what the genres hold, not with how many there are */ let acc = -size(m[0] || {}) / tot * Math.PI;
+      m.forEach((g) => { const span = (size(g) / tot) * Math.PI * 2, a = -Math.PI / 2 + acc + span / 2; acc += span; anchor.set(g.gid, [Math.cos(a) * R, Math.sin(a) * R]); });
+    }
     const at = (n) => anchor.get(n.kind === "macro" ? n.gid : n.kind === "sub" ? n.parentG : n.macroId) || [0, 0];
-    fx = d3.forceX((n) => at(n)[0]).strength((n) => n.kind === "macro" ? 0.5 : n.kind === "sub" ? 0.03 : 0.04);
-    fy = d3.forceY((n) => at(n)[1]).strength((n) => n.kind === "macro" ? 0.5 : n.kind === "sub" ? 0.03 : 0.04);
+    fx = d3.forceX((n) => at(n)[0]).strength((n) => n.kind === "macro" ? 0.5 : n.kind === "sub" ? 0.1 : 0.09);
+    fy = d3.forceY((n) => at(n)[1]).strength((n) => n.kind === "macro" ? 0.5 : n.kind === "sub" ? 0.1 : 0.09);
   } else if (tl) {
     const ys = ns.map((n) => n.yr).filter(Boolean), med = d3.median(ys) || 2000;
     const lo = Math.max(d3.min(ys) ?? 1990, 1880), hi = d3.max(ys) ?? 2024,  // older works (e.g. Marcus Aurelius) pin to the left edge
@@ -202,32 +220,66 @@ function applyLayout(alpha = 0.9, instant = false) {
     const top = Math.max(hi, 2001), marks = [[1950, 0.1], [1980, 0.2], [2000, 0.5]].filter(([y]) => y > lo && y < top);
     const cuts = [lo, ...marks.map((m) => m[0]), top], share = [0, ...marks.map(([y, f]) => Math.min(f, (y - lo) / (top - lo))), 1];
     const xs = d3.scaleLinear(cuts, share.map((f) => -halfW + f * halfW * 2)).clamp(true);
-    const macros = data.genres.filter((g) => !g.parent);
-    const cnt = (m) => ns.filter((n) => n.macroId === m.id).length;
-    let acc = 0; const lanes = macros.map((g) => { const h = Math.max(200, cnt(g) * 3.2); const l = { g, y0: acc, h, cy: acc + h / 2 }; acc += h; return l; });
+    // lanes: one per genre (empty genres get none), or one per rating, or a single stream
+    const stars = (lo, hi) => (n) => n.kind === "book" && n.rating >= lo && n.rating < hi;
+    const bands = v === 1 ? [{ name: "★★★★★", color: "#ffd43b", t: stars(4.75, 9) }, { name: "★★★★", color: "#a9e34b", t: stars(3.75, 4.75) }, { name: "★★★", color: "#74c0fc", t: stars(2.75, 3.75) },
+        { name: "★★ and under", color: "#b197fc", t: stars(0.1, 2.75) }, { name: "Not rated · " + K.key.queue.toLowerCase() + " · picks", color: UNCAT, t: () => true }]
+      : v === 2 ? [{ name: "", color: UNCAT, t: () => true }]
+      : data.genres.filter((g) => !g.parent).map((g) => ({ name: g.name, color: g.color, t: (n) => n.macroId === g.id }));
+    const laneIx = new Map(ns.map((n) => [n.id, Math.max(0, bands.findIndex((b) => b.t(n)))]));
+    const cnt = bands.map((b, i) => [...laneIx.values()].filter((x) => x === i).length), keep = bands.map((b, i) => i).filter((i) => cnt[i] > 0 || bands.length === 1);
+    let acc = 0; const lanes = keep.map((i) => { const h = Math.max(v === 2 ? 380 : 200, cnt[i] * (v === 2 ? 4.2 : 3.2)); const l = { g: bands[i], y0: acc, h, cy: acc + h / 2, i }; acc += h; return l; });
     const off = acc / 2; lanes.forEach((l) => { l.y0 -= off; l.cy -= off; });
-    const laneOf = (n) => Math.max(0, macros.findIndex((g) => g.id === n.macroId));
+    const laneOf = (n) => Math.max(0, lanes.findIndex((l) => l.i === laneIx.get(n.id)));
     timeline = { xs, lo, hi, lanes, halfW, top: lanes[0].y0, bot: lanes.at(-1).y0 + lanes.at(-1).h };
     fx = d3.forceX((n) => xs(n.yr || med)).strength(0.55);
-    fy = d3.forceY((n) => lanes[laneOf(n)].cy).strength(0.16);
+    fy = d3.forceY((n) => lanes[laneOf(n)].cy).strength(v === 2 ? 0.05 : 0.16);
   } else {
     // mind map: genres fan out around the root. Each genre gets a slice of the circle sized by how many items it holds,
     // each sub-genre its own spot fanned out inside that slice, and every item a gentle pull towards its own sub-genre,
     // so big genres can't shove small ones around and the map comes out the same on every load.
     const mac = nodes.filter((n) => n.kind === "macro" && ns.includes(n)).sort((a, b) => b.count - a.count);
-    const wt = mac.map((g) => Math.sqrt(g.count || 1) + 1.5), tot = d3.sum(wt) || 1;
-    const pos = new Map(), spos = new Map(); let acc = 0;
+    const pos = new Map(), spos = new Map(), ipos = new Map(); // anchors: genres, sub-genres, and (Tree) where a sub-genre's items gather
+    const subsOf = (g) => ns.filter((n) => n.kind === "sub" && n.parentG === g.gid).sort((x, y) => y.count - x.count || (x.gid < y.gid ? -1 : 1));
+    const room = (sg) => 46 + 17 * Math.sqrt(sg.count || 1); // rough radius a sub-genre's huddle of items needs
+    if (v === 1) { // Orbits: genres on an inner ring, every sub-genre on an outer ring beside its own genre
+      const need = mac.map((g) => Math.max(120, d3.sum(subsOf(g), (sg) => room(sg) * 2))), tot = d3.sum(need) || 1, R2 = Math.max(600, (tot / (2 * Math.PI)) * 1.08), R1 = R2 * 0.52;
+      let acc = 0;
+      mac.forEach((g, i) => {
+        const span = (need[i] / tot) * Math.PI * 2, a0 = -Math.PI / 2 + acc; acc += span;
+        pos.set(g.gid, [Math.cos(a0 + span / 2) * R1, Math.sin(a0 + span / 2) * R1]);
+        let used = 0; const subs = subsOf(g), sum = d3.sum(subs, (sg) => room(sg) * 2) || 1;
+        subs.forEach((sg, j) => { const w = (room(sg) * 2 / sum) * span, sa = a0 + used + w / 2, sr = R2 + (j % 2 ? 60 : 0); used += w; spos.set(sg.gid, [Math.cos(sa) * sr, Math.sin(sa) * sr]); });
+      });
+    } else if (v === 2) { // Tree: a mind map read sideways. Genres branch left and right of the centre, sub-genres beyond them, items at the tips
+      const side = [[], []], tall = [0, 0], h = (g) => Math.max(110, d3.sum(subsOf(g), (sg) => room(sg) * 1.7));
+      mac.forEach((g) => { const k = tall[0] <= tall[1] ? 0 : 1; side[k].push(g); tall[k] += h(g); }); // balance the two sides
+      side.forEach((gs, k) => { const dir = k ? -1 : 1; let y = -tall[k] / 2;
+        gs.forEach((g) => { const gh = h(g), subs = subsOf(g); pos.set(g.gid, [dir * 400, y + gh / 2]);
+          let sy = y + (gh - d3.sum(subs, (sg) => room(sg) * 1.7)) / 2;
+          subs.forEach((sg) => { const sh = room(sg) * 1.7; spos.set(sg.gid, [dir * 840, sy + sh / 2]); ipos.set(sg.gid, [dir * (980 + room(sg)), sy + sh / 2]); sy += sh; });
+          y += gh; }); });
+    } else { // Fan (the original)
+    const wt = mac.map((g) => Math.sqrt(g.count || 1) + 1.5), tot = d3.sum(wt) || 1; let acc = 0;
     mac.forEach((g, i) => {
       const span = (wt[i] / tot) * Math.PI * 2, a = -Math.PI / 2 + acc + span / 2 + 0.35, r = 300 + 34 * Math.sqrt(g.count); acc += span;
       pos.set(g.gid, [Math.cos(a) * r, Math.sin(a) * r]);
-      const subs = ns.filter((n) => n.kind === "sub" && n.parentG === g.gid).sort((x, y) => y.count - x.count || (x.gid < y.gid ? -1 : 1));
+      const subs = subsOf(g);
       const fan = Math.min(span * 0.8, 1.7), k = subs.length;
       // biggest sub-genre in the middle of the fan, the rest alternating outwards; staggered radii so neighbours' labels don't line up
       subs.forEach((sg, j) => { const slot = j === 0 ? 0 : (j % 2 ? 1 : -1) * Math.ceil(j / 2), sa = a + (k > 1 ? (slot / k) * fan : 0), sr = r * 1.45 + (j % 2) * 55 + 20 * Math.sqrt(sg.count || 1);
         spos.set(sg.gid, [Math.cos(sa) * sr, Math.sin(sa) * sr]); });
     });
-    const at = (n) => (n.kind === "macro" ? pos.get(n.gid) : n.kind === "sub" ? spos.get(n.gid) : spos.get(n.genreIds?.[0]) || pos.get(n.macroId)) || [0, 0];
-    const pull = (n) => n.kind === "macro" ? 0.3 : n.kind === "sub" ? 0.08 : n.genreIds?.length ? 0.012 : 0.004;
+    // two names that would print on top of each other: move the smaller genre a little further out (repeat until clear)
+    const lab = [...mac.map((g) => ({ g, p: pos.get(g.gid), w: g.name.length * 10 + 16 })), ...ns.filter((n) => n.kind === "sub" && spos.has(n.gid)).map((g) => ({ g, p: spos.get(g.gid), w: g.name.length * 7 + 12 }))];
+    for (let pass = 0; pass < 8; pass++) { let moved = false;
+      for (let i = 0; i < lab.length; i++) for (let j = i + 1; j < lab.length; j++) { const A = lab[i], B = lab[j];
+        if (Math.abs(A.p[0] - B.p[0]) < (A.w + B.w) / 2 && Math.abs((A.p[1] + A.g.rad) - (B.p[1] + B.g.rad)) < 24) {
+          const S = (A.g.count || 0) <= (B.g.count || 0) ? A : B, r = Math.hypot(S.p[0], S.p[1]) || 1, f = (r + 44) / r; S.p[0] *= f; S.p[1] *= f; moved = true; } }
+      if (!moved) break; }
+    }
+    const at = (n) => (n.kind === "macro" ? pos.get(n.gid) : n.kind === "sub" ? spos.get(n.gid) : ipos.get(n.genreIds?.[0]) || spos.get(n.genreIds?.[0]) || pos.get(n.macroId)) || [0, 0];
+    const pull = (n) => n.kind === "macro" ? 0.3 : n.kind === "sub" ? (placed ? 0.3 : 0.08) : n.genreIds?.length ? (placed ? 0.035 : 0.012) : 0.004;
     fx = d3.forceX((n) => (n.kind === "root" ? 0 : at(n)[0])).strength(pull);
     fy = d3.forceY((n) => (n.kind === "root" ? 0 : at(n)[1])).strength(pull);
     if (instant) for (const n of ns) { if (n.kind === "root") continue; const [ax, ay] = at(n), j = isItem(n) ? 70 : 20; // first load: start everything near home
@@ -239,10 +291,29 @@ function applyLayout(alpha = 0.9, instant = false) {
   sim.alpha(alpha).restart();
 }
 
+function setLayout(i) { // one of the three layouts of the current view
+  i = ((i % 3) + 3) % 3; $("#layout-menu")?.remove();
+  if (i === layoutVar[mode]) return;
+  layoutVar[mode] = i; store.set("layout-" + K.id, JSON.stringify(layoutVar)); showLayout();
+  applyLayout(1);
+  setTimeout(() => fitView(focusedItems() || vNodes), reduce ? 0 : 1400);
+}
+function showLayout() { const b = $("#b-layout"); if (b) b.textContent = "▦ " + LAYOUTS[mode][layoutVar[mode]]; }
+function layoutMenu() {
+  if ($("#layout-menu")) return $("#layout-menu").remove();
+  const b = $("#b-layout"), r = b.getBoundingClientRect(), el = document.createElement("div");
+  el.id = "layout-menu"; el.className = "glass layout-menu"; el.setAttribute("role", "menu");
+  el.innerHTML = `<h4>${mode[0].toUpperCase() + mode.slice(1)} layout</h4>` + LAYOUTS[mode].map((n, i) => `<button role="menuitemradio" aria-checked="${i === layoutVar[mode]}" data-i="${i}" class="${i === layoutVar[mode] ? "on" : ""}">${n}</button>`).join("");
+  document.body.append(el);
+  el.style.left = clamp(r.left + r.width / 2 - el.offsetWidth / 2, 8, innerWidth - el.offsetWidth - 8) + "px"; el.style.bottom = innerHeight - r.top + 10 + "px";
+  el.onclick = (e) => { const x = e.target.closest("[data-i]"); if (x) setLayout(+x.dataset.i); };
+  setTimeout(() => addEventListener("pointerdown", function away(e) { if (!e.target.closest("#layout-menu, #b-layout")) $("#layout-menu")?.remove(); if (!$("#layout-menu")) removeEventListener("pointerdown", away); }), 0);
+}
 function setMode(m) {
   if (m === mode) return;
-  mode = m;
+  mode = m; $("#layout-menu")?.remove();
   document.querySelectorAll(".modes button").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
+  showLayout();
   applyLayout(1);
   setTimeout(() => fitView(focusedItems() || vNodes), reduce ? 0 : 1400);
 }
@@ -945,7 +1016,7 @@ function setCovers(m) {
   for (const [id, url] of Object.entries(m)) { const n = byId.get(id); if (!n) continue; n.cover = url || (K.isPhoto?.(n.cover) ? null : n.cover); imgs.delete(id); }
   if (selected) renderPanel();
 }
-window.Library = { get data() { return data; }, rebuild, setCovers, select: (id) => select(byId.get(id) || null), node: (id) => byId.get(id), refreshPanel: () => renderPanel(), refreshLegend: () => renderLegend() };
+window.Library = { settle: (n = 300) => { sim.tick(n); sim.alpha(0.05); }, setLayout, get mode() { return mode; }, get data() { return data; }, rebuild, setCovers, select: (id) => select(byId.get(id) || null), node: (id) => byId.get(id), refreshPanel: () => renderPanel(), refreshLegend: () => renderLegend() };
 
 /* ---------- dock + keyboard ---------- */
 function setQueue(v) { showQueue = v; $("#t-queue").checked = v; if (!v && selected?.kind === "queue") select(null); applyLayout(0.7); }
@@ -972,6 +1043,8 @@ function bindUI() {
   $("#b-zoom-in").onclick = () => d3.select(canvas).transition().duration(300).call(zoom.scaleBy, 1.5);
   $("#b-zoom-out").onclick = () => d3.select(canvas).transition().duration(300).call(zoom.scaleBy, 1 / 1.5);
   $("#b-fit").onclick = () => { setFocus(null); fitView(vNodes); };
+  const lb = document.createElement("button"); lb.id = "b-layout"; lb.title = "Choose a layout for this view (L)"; lb.setAttribute("aria-label", "Choose a layout for this view"); lb.setAttribute("aria-haspopup", "menu");
+  $("#b-fit").after(lb); lb.onclick = layoutMenu; showLayout();
   $("#b-surprise").onclick = surprise;
   $("#b-png").onclick = savePNG;
   $("#b-theme").onclick = () => setTheme(C.light ? "dark" : "light");
@@ -991,6 +1064,7 @@ function bindUI() {
       case "s": case "S": surprise(); break;
       case "d": case "D": setTheme(C.light ? "dark" : "light"); break;
       case "0": setFocus(null); fitView(vNodes); break;
+      case "l": case "L": setLayout(layoutVar[mode] + 1); break;
       case "?": $("#help").hidden = false; break;
     }
   });

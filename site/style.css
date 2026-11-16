@@ -265,3 +265,8 @@ kbd{font:500 11px var(--ui);padding:1px 6px;border:1px solid var(--line);border-
 :root[data-kind="games"] .macro i{border-radius:0;clip-path:polygon(50% 0,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%);box-shadow:none;width:12px;height:13px}
 :root[data-kind="games"] .brand h1{letter-spacing:.02em}
 :root[data-kind="games"] .why{font-family:"Fraunces","Iowan Old Style",Georgia,serif}
+/* layout chooser (the ▦ button in the dock) */
+.layout-menu{position:fixed;z-index:30;display:flex;flex-direction:column;gap:2px;padding:8px;min-width:150px}
+.layout-menu h4{font:600 11px var(--ui);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:2px 8px 6px;margin:0}
+.layout-menu button{padding:8px 10px;border-radius:9px;text-align:left;font-weight:500}
+.layout-menu button:hover{background:var(--line)} .layout-menu button.on{background:var(--accent);color:var(--accent-ink)}

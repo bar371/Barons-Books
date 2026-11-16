@@ -303,7 +303,7 @@
       <li><b>Click</b> to open details · <b>Esc</b> to clear</li>
       <li><b>Click a category</b> in the legend to isolate it</li>
       <li><kbd>/</kbd> search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> layouts · <kbd>R</kbd> recommendations</li>
-      <li><kbd>Q</kbd> wishlist · <kbd>T</kbd> titles · <kbd>S</kbd> surprise me · <kbd>D</kbd> theme · <kbd>0</kbd> fit</li>`],
+      <li><kbd>Q</kbd> wishlist · <kbd>T</kbd> titles · <kbd>S</kbd> surprise me · <kbd>D</kbd> theme · <kbd>0</kbd> fit · <kbd>L</kbd> layout</li>`],
       ["#help p.muted", "textContent", "Solid frames are games I own. Dotted frames with a ribbon are on my wishlist, and a golden marching frame is what's on the table right now. Dashed, softly pulsing frames are recommendations, tied by a dashed line to the games that inspired them. The better the match, the bigger and brighter the pick and the faster its lane; the top 10 wear a numbered medal."],
     ],
   };
@@ -466,7 +466,7 @@
       <li><b>Click</b> to open details · <b>Esc</b> to clear</li>
       <li><b>Click a genre</b> in the legend to isolate it</li>
       <li><kbd>/</kbd> search · <kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> layouts · <kbd>R</kbd> recommendations</li>
-      <li><kbd>Q</kbd> backlog · <kbd>T</kbd> titles · <kbd>S</kbd> surprise me · <kbd>D</kbd> theme · <kbd>0</kbd> fit</li>`],
+      <li><kbd>Q</kbd> backlog · <kbd>T</kbd> titles · <kbd>S</kbd> surprise me · <kbd>D</kbd> theme · <kbd>0</kbd> fit · <kbd>L</kbd> layout</li>`],
       ["#help p.muted", "textContent", "Solid frames are games I've played. Dotted frames with a ribbon are in my backlog, and a golden marching frame is what I'm playing right now. Dashed, softly pulsing frames are recommendations, tied by a dashed line to the games that inspired them. The better the match, the bigger and brighter the pick and the faster its lane; the top 10 wear a numbered medal."],
     ],
   };
