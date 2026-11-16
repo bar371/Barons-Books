@@ -82,7 +82,7 @@ def main(src, out):
         r["cands"] = exact or [h for h in hits[:1] if k in key(h) or key(h) in k]
         r["fuzzy"] = not exact
         # remakes and reboots share a name; Wikipedia titles them "Name (2018 video game)", which search may rank low
-        r["guess"] = [f'{r["title"]} ({r["year"]} video game)'] if r["year"] else []
+        r["guess"] = ([f'{r["title"]} ({r["year"]} video game)'] if r["year"] else []) + [f'{r["title"]} (video game)']  # e.g. "Final Fantasy (video game)"
         time.sleep(0.15)
 
     # 2. page image + Wikidata id for every candidate
