@@ -311,6 +311,7 @@
   // ---------- video games ----------
   // Same map, own words. Lookups use Wikipedia's video game articles (cover art in the infobox) + Wikidata
   // (developer, platforms, series, year). A library usually starts from a list file (see importCSV below).
+  let vgSkipped = 0; // Steam import: owned games left out because they were barely played
   const VG_STRIP = / \((\d{4} )?video game\)$/;
   const firstYear = (c) => { const ys = (c?.P577 || []).map((x) => parseInt(x.mainsnak?.datavalue?.value?.time?.slice(1, 5))).filter(Boolean); return ys.length ? Math.min(...ys) : null; };
   const plats = (n) => Array.isArray(n.platforms) && n.platforms.length ? n.platforms.slice(0, 3).join(", ") + (n.platforms.length > 3 ? ` +${n.platforms.length - 3}` : "") : null;
@@ -398,17 +399,48 @@
     ...videoArt, // artFor, isPhoto, fetchArt
     // A list file: { "kind": "videogames", "items": [{ title, year, author, platforms, series, seriesNo, rating, shelf, genres, cover, wikidata }] }.
     // Claude writes one from a list of games you name; importing it fills the map in one go. Read in the browser only.
-    importLabel: "Have a games list file? Import it",
-    importAccept: ".json,application/json",
-    importNote: "Ratings and genres come from the file; change anything afterwards in edit mode. Claude adds picks on the next update.",
+    importLabel: "Import a list: a games list file, a Steam library, a CSV, or plain names",
+    importAccept: ".json,.csv,.tsv,.txt,application/json,text/csv,text/plain",
+    importNote: "Ratings and genres come from the file when it has them; change anything afterwards in edit mode. Claude fills in what's missing (genres, studios, covers) and adds picks on the next update.",
     importEmpty: "No games in that file.",
     sameItem: (b, it) => b.id === it.id || (b.wikidata && b.wikidata === it.wikidata) || (String(b.title || "").toLowerCase() === String(it.title || "").toLowerCase() && (!b.year || !it.year || b.year === it.year)), // remakes share a name: the year tells them apart
     importSummary: (items, updates) => { const c = (sh) => items.filter((i) => i.shelf === sh).length;
-      return `<p><b>${items.length}</b> games found: ${c("read")} played${c("reading") ? `, ${c("reading")} playing now` : ""}${c("to-read") ? `, ${c("to-read")} for the backlog` : ""}.${updates ? ` ${updates} already on your map get updated, not doubled.` : ""}</p>`; },
+      return `<p><b>${items.length}</b> games found: ${c("read")} played${c("reading") ? `, ${c("reading")} playing now` : ""}${c("to-read") ? `, ${c("to-read")} for the backlog` : ""}.${updates ? ` ${updates} already on your map get updated, not doubled.` : ""}${vgSkipped ? ` ${vgSkipped} left out (played under 2 hours).` : ""}</p>`; },
     async importCSV(text) {
-      let j; try { j = JSON.parse(text.replace(/^﻿/, "")); } catch { throw new Error("That file isn't a games list (it should be a .json file)"); }
-      if (j?.kind !== "videogames" || !Array.isArray(j.items)) throw new Error("That file doesn't look like a video games list");
-      const int = (v) => { const x = parseInt(v, 10); return x > 0 ? x : null; }, seen = new Set(), items = [];
+      const raw = text.replace(/^\uFEFF/, "").trim(), int = (v) => { const x = parseInt(v, 10); return x > 0 ? x : null; }, seen = new Set(), items = [];
+      let j = null; try { j = JSON.parse(raw); } catch {}
+      vgSkipped = 0;
+      const steam = j?.response?.games || (Array.isArray(j?.games) ? j.games : null);
+      if (steam) { // a Steam library (the saved answer of Steam's GetOwnedGames, see README): names, hours played and Steam's own cover art
+        if (steam.length && !steam[0].name) throw new Error("That Steam file has no game names: add include_appinfo=1 to the link and save it again");
+        for (const g of steam) {
+          const mins = +g.playtime_forever || 0; if (mins < 120) { vgSkipped++; continue; } // owned but barely started: left out
+          items.push({ id: "steam-" + g.appid, steamId: String(g.appid), title: String(g.name).replace(/[™®]/g, "").trim(), author: "", year: null, platforms: ["Microsoft Windows"], series: null,
+            rating: null, shelf: "read", hours: Math.round(mins / 6) / 10, note: null, genres: [], cover: `https://cdn.cloudflare.steamstatic.com/steam/apps/${g.appid}/library_600x900.jpg`, soft: true });
+        }
+        const loads = (u) => new Promise((ok) => { const im = new Image(); const t = setTimeout(() => ok(false), 7000); im.onload = () => { clearTimeout(t); ok(im.naturalWidth > 50); }; im.onerror = () => { clearTimeout(t); ok(false); }; im.src = u; });
+        for (let i = 0; i < items.length; i += 24) await Promise.all(items.slice(i, i + 24).map(async (it) => { if (!(await loads(it.cover))) it.cover = null; })); // older games have no library art
+        return items;
+      }
+      if (!j) { // a table (CSV / TSV with a title or name column) or a plain list, one game per line
+        const head = raw.split(/\r?\n/)[0], sep = head.includes("\t") ? "\t" : head.includes(";") && !head.includes(",") ? ";" : ",";
+        const table = /(^|[,;\t"])\s*(title|name|game)\s*($|[,;\t"])/i.test(head) ? d3.dsvFormat(sep).parse(raw) : null;
+        const col = (r, ...names) => { for (const k of Object.keys(r)) if (names.includes(k.trim().toLowerCase())) return String(r[k] ?? "").trim(); return ""; };
+        const rows = table ? table.map((r) => ({ title: col(r, "title", "name", "game"), rating: col(r, "rating", "stars", "score", "my rating"), hours: col(r, "hours", "playtime", "time played", "hours played"),
+          platform: col(r, "platform", "platforms", "system", "console"), shelf: col(r, "shelf", "status", "state"), year: col(r, "year", "release year", "released") }))
+          : raw.split(/\r?\n/).map((l) => ({ title: l.replace(/^\s*(?:[-*•]|\d+[.)])\s+/, "").trim() })).filter((r) => r.title && !r.title.startsWith("#"));
+        for (const r of rows) {
+          if (!r.title) continue;
+          const year = int(r.year), id = "vg-" + gslug(r.title + (year ? " " + year : "")); if (seen.has(id)) continue; seen.add(id);
+          const st = (r.shelf || "").toLowerCase(), shelf = /playing|current|in progress/.test(st) ? "reading" : /backlog|wish|want|unplayed|not started|to.?play/.test(st) ? "to-read" : "read";
+          let stars = parseFloat(r.rating) || 0; if (stars > 10) stars /= 20; else if (stars > 5) stars /= 2; stars = Math.round(stars * 2) / 2; // 100-point and 10-point scores become stars
+          items.push({ id, title: r.title, author: "", year, platforms: r.platform ? r.platform.split(/\s*[,/|]\s*/).filter(Boolean).slice(0, 8) : null, series: null,
+            rating: shelf === "read" && stars >= 1 ? Math.min(5, stars) : null, shelf, ...(parseFloat(r.hours) > 0 ? { hours: Math.round(parseFloat(r.hours) * 10) / 10 } : {}), note: null, genres: [], cover: null, ...(st ? {} : { soft: true }) });
+        }
+        if (!items.length) throw new Error("No game names found in that file");
+        return items;
+      }
+      if (j?.kind !== "videogames" || !Array.isArray(j.items)) throw new Error("That file doesn't look like a games list or a Steam library");
       for (const r of j.items) {
         const title = String(r.title || "").trim(); if (!title) continue;
         const year = int(r.year), wikidata = /^Q\d+$/.test(r.wikidata || "") ? r.wikidata : null, id = wikidata ? "wd-" + wikidata : "vg-" + gslug(title + (year ? " " + year : ""));

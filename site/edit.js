@@ -305,12 +305,12 @@
   abform.addEventListener("click", (e) => {
     if (!e.target.closest(".ab-import-go")) return;
     const now = new Date().toISOString();
-    for (const it of imported) {
+    for (const { soft, ...it } of imported) { // soft: the file didn't say which shelf, so a game already on the map keeps its own
       const ex = ov.books.find((b) => sameItem(b, it));
       if (ex) { // update what BGG knows better (shelf, your rating, plays, note); fill the rest only where empty
-        Object.assign(ex, { shelf: it.shelf, bggId: it.bggId, plays: it.plays, note: it.note ?? ex.note }); if (it.owned === false) ex.owned = false; else delete ex.owned;
+        Object.assign(ex, { shelf: soft ? ex.shelf : it.shelf, bggId: it.bggId, plays: it.plays, note: it.note ?? ex.note }); if (it.owned === false) ex.owned = false; else delete ex.owned;
         if (it.rating) { ex.rating = it.rating; if (ov.ratings) delete ov.ratings[ex.id]; }
-        for (const k of ["author", "year", "players", "playtime", "weight", "series", "cover", "expansion", "platforms", "seriesNo", "wikidata"]) if ((ex[k] == null || ex[k] === "") && it[k] != null) ex[k] = it[k];
+        for (const k of ["author", "year", "players", "playtime", "weight", "series", "cover", "expansion", "platforms", "seriesNo", "wikidata", "hours", "steamId"]) if ((ex[k] == null || ex[k] === "") && it[k] != null) ex[k] = it[k];
         if (it.genres?.length && !ex.genres?.length) { ex.genres = it.genres; delete ex.pending; }
       } else ov.books.push({ ...it, genres: it.genres || [], added: now, ...(it.genres?.length ? {} : { pending: true }) }); // a list that already carries categories shows up sorted at once
     }

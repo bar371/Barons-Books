@@ -197,8 +197,10 @@ function applyLayout(alpha = 0.9, instant = false) {
     const lo = Math.max(d3.min(ys) ?? 1990, 1880), hi = d3.max(ys) ?? 2024,  // older works (e.g. Marcus Aurelius) pin to the left edge
       halfW = clamp(ns.length * 7, 700, 1700);
     // history is squeezed, the recent decades (where most reading happens) get the room
-    const cuts = [lo, 1950, 1980, 2000, Math.max(hi, 2001)].filter((v, i, a) => i === 0 || v > a[i - 1]);
-    const share = [0, 0.1, 0.2, 0.5, 1].slice(0, cuts.length - 1).concat(1);
+    // year marks and the share of the width they sit at; marks before the first year are dropped (a library that
+    // starts in 1987 used to get a scrambled scale and piled its oldest items on the left edge)
+    const top = Math.max(hi, 2001), marks = [[1950, 0.1], [1980, 0.2], [2000, 0.5]].filter(([y]) => y > lo && y < top);
+    const cuts = [lo, ...marks.map((m) => m[0]), top], share = [0, ...marks.map(([y, f]) => Math.min(f, (y - lo) / (top - lo))), 1];
     const xs = d3.scaleLinear(cuts, share.map((f) => -halfW + f * halfW * 2)).clamp(true);
     const macros = data.genres.filter((g) => !g.parent);
     const cnt = (m) => ns.filter((n) => n.macroId === m.id).length;
