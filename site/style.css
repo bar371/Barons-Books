@@ -81,7 +81,7 @@ kbd{font:500 11px var(--ui);padding:1px 6px;border:1px solid var(--line);border-
 .kind{display:inline-block;font:600 10px var(--ui);letter-spacing:.1em;text-transform:uppercase;padding:3px 9px;border-radius:99px;margin-bottom:8px}
 .kind.read{background:color-mix(in srgb,var(--c) 25%,transparent);color:var(--ink)}
 .kind.rec{border:1px dashed var(--c);color:var(--ink)}
-.stars{color:#ffd43b;letter-spacing:2px;font-size:15px} .stars i{color:var(--line);font-style:normal}
+.stars{color:#ffd43b;letter-spacing:2px;font-size:15px} .stars i{color:var(--line);font-style:normal} .stars .half{font-weight:inherit;background:linear-gradient(90deg,#ffd43b 50%,var(--line) 50%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .facts{display:flex;gap:14px;flex-wrap:wrap;color:var(--muted);font-size:12.5px;margin:6px 0}
 .blurb{margin-top:10px;line-height:1.55}
 .why{margin-top:10px;padding:12px 14px;border-radius:12px;border-left:3px solid var(--c);background:color-mix(in srgb,var(--c) 10%,transparent);font-family:var(--display);font-size:15px;line-height:1.5}

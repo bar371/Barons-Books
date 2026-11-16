@@ -4,7 +4,7 @@
 
 One game per line, fields separated by "|" (only the title is required):
 
-  title | year | stars 1-5 | shelf | genres | series | number in series | your own note
+  title | year | stars 1-5 (halves allowed: 4.5) | shelf | genres | series | number in series | your own note
 
   The Witcher 3: Wild Hunt | 2015 | 5 | played | Action RPG; Open world | The Witcher | 3
   Hades II | | | backlog | Roguelike
@@ -69,7 +69,7 @@ def main(src, out):
         for g in genres:
             if g not in known:
                 notes.append(f"line {n}: unknown genre '{g}' ({f[0]})")
-        rows.append({"line": n, "title": f[0], "year": int(f[1]) if f[1].isdigit() else None, "rating": int(f[2]) if f[2].isdigit() else None,
+        rows.append({"line": n, "title": f[0], "year": int(f[1]) if f[1].isdigit() else None, "rating": (float(f[2]) if "." in f[2] else int(f[2])) if re.fullmatch(r"[1-5](\.[05])?", f[2]) else None,
                      "shelf": SHELF.get(f[3].lower(), "read"), "genres": [g for g in genres if g in known], "series": f[5] or None,
                      "seriesNo": int(f[6]) if f[6].isdigit() else None, "note": f[7] or None})
 

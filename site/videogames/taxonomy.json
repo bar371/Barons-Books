@@ -1,7 +1,7 @@
 {
  "_note": "Video-game genres: main group -> colour and sub-genres. Read by site/kind.js and scripts/cloud_sync.py. Broad on purpose so a library forms a few real clusters.",
  "groups": [
-  {"name": "RPG", "color": "#b197fc", "subs": ["Action RPG", "Western RPG", "JRPG", "Tactical RPG", "MMO"]},
+  {"name": "RPG", "color": "#b197fc", "subs": ["Action RPG", "Western RPG", "JRPG & turn-based", "Tactical RPG", "MMO"]},
   {"name": "Action & Adventure", "color": "#ff8787", "subs": ["Action-adventure", "Open world", "Soulslike", "Hack & slash", "Stealth", "Survival horror"]},
   {"name": "Shooter", "color": "#ffa94d", "subs": ["First-person shooter", "Third-person shooter", "Online & battle royale"]},
   {"name": "Strategy & Simulation", "color": "#74c0fc", "subs": ["Real-time strategy", "Turn-based & 4X", "City & management", "Simulation & sandbox"]},

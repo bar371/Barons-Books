@@ -729,7 +729,7 @@ function showTip(n, cx, cy) {
     h = `<b>${esc(n.title)}</b><small>${esc(n.author)}${n.year ? " · " + n.year : ""}</small>`;
     if (n.kind === "rec") h += `<p class="tipm">★ ${n.score}% match · #${n.rank} of ${data.recs.length}</p>${n.reason ? `<p>✦ ${esc(trunc(n.reason, 110))}</p>` : ""}`;
     else if (n.kind === "queue") h += `<p>${n.shelf === "reading" ? K.tipReading : K.tipQueue(n.rank, qCount(), n.score)}</p>`;
-    else if (n.rating) h += `<p><span class="stars">${"★".repeat(n.rating)}<i>${"★".repeat(5 - n.rating)}</i></span></p>`;
+    else if (n.rating) h += `<p>${stars5(n.rating)}</p>`;
   } else h = `<b>${esc(n.name)}</b><small>${K.count(n.count)} · click to ${focusGenre === n.gid ? "show all" : "isolate"}</small>`;
   tip.innerHTML = h; tip.hidden = false;
   const r = tip.getBoundingClientRect();
@@ -748,7 +748,8 @@ function setFocus(g) {
   if (g) fitView(focusedItems(), true, 1.8); else fitView(vNodes);
 }
 
-const stars5 = (r) => `<span class="stars" aria-label="${r} of 5 stars">${"★".repeat(r)}<i>${"★".repeat(5 - r)}</i></span>`;
+const stars5 = (r) => { const f = Math.floor(r), h = r - f >= 0.5 ? 1 : 0; // whole stars as before; a half star (4.5) is one star filled half way
+  return `<span class="stars" aria-label="${r} of 5 stars">${"★".repeat(f)}${h ? `<b class="half">★</b>` : ""}<i>${"★".repeat(5 - f - h)}</i></span>`; };
 const thumb = (n, w = 34) => A && n.atlas
   ? `<span class="ph" style="width:${w}px;height:${w * 1.5}px;background:url(${A.src}) no-repeat -${(n.atlas[0] * w) / A.cw}px -${(n.atlas[1] * w) / A.cw}px / ${(A.w * w) / A.cw}px ${(A.h * w) / A.cw}px"></span>`
   : n.cover ? `<img src="${esc(n.cover)}" alt="" loading="lazy">` : `<span class="ph"></span>`;
@@ -792,7 +793,7 @@ function renderPanel() {
 function overviewHTML() {
   const bs = data.books, rated = bs.filter((b) => b.rating), pages = K.tile3.value(bs);
   const avg = rated.length ? d3.mean(rated, (b) => b.rating) : 0;
-  const hist = d3.range(1, 6).map((r) => rated.filter((b) => b.rating === r).length), hmax = Math.max(1, ...hist);
+  const hist = d3.range(1, 6).map((r) => rated.filter((b) => Math.round(b.rating) === r).length), hmax = Math.max(1, ...hist);
   const yrs = d3.rollups(bs.filter((b) => b.dateRead), (v) => v.length, (b) => b.dateRead.slice(0, 4)).sort((a, b) => a[0] - b[0]).slice(-9), ymax = Math.max(1, ...yrs.map((y) => y[1]));
   const au = d3.rollups(bs.filter((b) => b.author), (v) => v.length, (b) => b.author).sort((a, b) => b[1] - a[1]).slice(0, 5);
   return `<h2>Overview</h2><p class="by">${K.overviewBy}</p>

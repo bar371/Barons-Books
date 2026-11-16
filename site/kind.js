@@ -413,9 +413,9 @@
         const title = String(r.title || "").trim(); if (!title) continue;
         const year = int(r.year), wikidata = /^Q\d+$/.test(r.wikidata || "") ? r.wikidata : null, id = wikidata ? "wd-" + wikidata : "vg-" + gslug(title + (year ? " " + year : ""));
         if (seen.has(id)) continue; seen.add(id);
-        const shelf = ["read", "to-read", "reading"].includes(r.shelf) ? r.shelf : "read", stars = int(r.rating);
+        const shelf = ["read", "to-read", "reading"].includes(r.shelf) ? r.shelf : "read", stars = Math.round(parseFloat(r.rating) * 2) / 2 || null; // half stars allowed
         items.push({ id, wikidata, title, author: String(r.author || ""), year, platforms: Array.isArray(r.platforms) && r.platforms.length ? r.platforms.map(String).slice(0, 8) : null,
-          series: r.series ? String(r.series) : null, ...(int(r.seriesNo) ? { seriesNo: int(r.seriesNo) } : {}), rating: shelf === "read" && stars ? Math.min(5, stars) : null, shelf,
+          series: r.series ? String(r.series) : null, ...(int(r.seriesNo) ? { seriesNo: int(r.seriesNo) } : {}), rating: shelf === "read" && stars >= 1 ? Math.min(5, stars) : null, shelf,
           note: r.note ? String(r.note) : null, genres: Array.isArray(r.genres) ? r.genres.map(String).slice(0, 3) : [], cover: /^https:\/\//.test(r.cover || "") ? r.cover : null });
       }
       return items;
