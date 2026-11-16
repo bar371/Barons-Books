@@ -227,7 +227,7 @@
         ents = (await fetch(`${WD}&props=claims&ids=${qids.join("|")}`, { signal }).then((r) => r.json())).entities || {};
         const more = [...new Set(Object.values(ents).flatMap((e) => [...designerIds(e.claims), ...ids(e.claims, "P179")]))].slice(0, 50);
         if (more.length) {
-          const ls = (await fetch(`${WD}&props=labels&languages=en&ids=${more.join("|")}`, { signal }).then((r) => r.json())).entities || {};
+          const ls = (await fetch(`${WD}&props=labels&languages=en&languagefallback=1&ids=${more.join("|")}`, { signal }).then((r) => r.json())).entities || {};
           for (const [k, e] of Object.entries(ls)) names[k] = e.labels?.en?.value;
         }
       }
@@ -378,7 +378,7 @@
         ents = (await fetch(`${WD}&props=claims&ids=${qids.join("|")}`, { signal }).then((r) => r.json())).entities || {};
         const more = [...new Set(Object.values(ents).flatMap((e) => [...studio(e.claims), ...ids(e.claims, "P179"), ...ids(e.claims, "P400").slice(0, 6)]))];
         for (let i = 0; i < more.length && i < 150; i += 50) { // the API answers 50 ids at a time
-          const ls = (await fetch(`${WD}&props=labels&languages=en&ids=${more.slice(i, i + 50).join("|")}`, { signal }).then((r) => r.json())).entities || {};
+          const ls = (await fetch(`${WD}&props=labels&languages=en&languagefallback=1&ids=${more.slice(i, i + 50).join("|")}`, { signal }).then((r) => r.json())).entities || {};
           for (const [k, e] of Object.entries(ls)) names[k] = e.labels?.en?.value;
         }
       }

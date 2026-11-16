@@ -126,7 +126,7 @@ def main(src, out):
     need = sorted({x for r in rows if r["pick"] and r["pick"][2] for p in ("P178", "P123", "P179", "P400") for x in ids(claims(r["pick"][2]), p)[:6]})
     name = {}
     def labels(batch):  # one deleted id makes Wikidata refuse the whole batch: then ask one by one
-        r = get(f"{WD}&props=labels&languages=en&ids={'|'.join(batch)}")
+        r = get(f"{WD}&props=labels&languages=en&languagefallback=1&ids={'|'.join(batch)}")
         if "entities" not in r and len(batch) > 1:
             for x in batch:
                 labels([x])
