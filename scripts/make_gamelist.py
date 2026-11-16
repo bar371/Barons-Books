@@ -125,9 +125,15 @@ def main(src, out):
             notes.append(f'line {r["line"]}: check the match: "{r["title"]}" {r["year"] or ""} -> "{best[1]}" ({best[3]})')
     need = sorted({x for r in rows if r["pick"] and r["pick"][2] for p in ("P178", "P123", "P179", "P400") for x in ids(claims(r["pick"][2]), p)[:6]})
     name = {}
-    for i in range(0, len(need), 50):
-        for k, e in get(f"{WD}&props=labels&languages=en&ids={'|'.join(need[i:i + 50])}").get("entities", {}).items():
+    def labels(batch):  # one deleted id makes Wikidata refuse the whole batch: then ask one by one
+        r = get(f"{WD}&props=labels&languages=en&ids={'|'.join(batch)}")
+        if "entities" not in r and len(batch) > 1:
+            for x in batch:
+                labels([x])
+        for k, e in r.get("entities", {}).items():
             name[k] = e.get("labels", {}).get("en", {}).get("value")
+    for i in range(0, len(need), 50):
+        labels(need[i:i + 50])
 
     items = []
     for r in rows:
