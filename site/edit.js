@@ -382,6 +382,7 @@
     b.title = u ? "Account and libraries" : "Sign in"; b.textContent = u ? "◉ Account" : "Sign in";
     dock.insertBefore(b, document.querySelector("#b-help"));
     b.onclick = openAccount;
+    if (u) window.Cloud.pendingAccess?.().then((p) => { if (p.length) { b.classList.add("has-req"); b.title = `${p.length} waiting for your approval`; } });
     if (sessionStorage.getItem("bl-welcome")) { sessionStorage.removeItem("bl-welcome"); setTimeout(() => toast("Welcome! Your email is confirmed."), 800); if (!ctx.isMine) window.Cloud.me().then((me) => me && go(me.slug)); }
     const linkErr = sessionStorage.getItem("bl-link-error"); if (linkErr) { sessionStorage.removeItem("bl-link-error"); setTimeout(() => toast("Link problem: " + linkErr), 800); }
     const owner = ctx.profile?.display_name || "Baron", h1 = document.querySelector(".brand h1");
@@ -408,7 +409,7 @@
       try {
         if (signup) {
           const r = await C.signUp(f.name.value.trim(), f.email.value.trim(), f.pw.value);
-          if (r === "confirm") { f.innerHTML = `<h2>Check your email</h2><p class="muted">We sent a confirmation link to <b>${esc(f.email.value)}</b>. Open it on this device and you'll land in your new library. Baron then gets a note to approve full access (picks from Claude).</p><button class="ab-close" type="button" aria-label="Close">✕</button>`; return; }
+          if (r === "confirm") { f.innerHTML = `<h2>Check your email</h2><p class="muted">We sent a confirmation link to <b>${esc(f.email.value)}</b>. Open it on this device and you'll land in your new library. Baron then approves full access (picks from Claude).</p><button class="ab-close" type="button" aria-label="Close">✕</button>`; return; }
         } else await C.signIn(f.email.value.trim(), f.pw.value);
         const me = await C.me(); go(me?.slug);
       } catch (x) {
@@ -420,12 +421,13 @@
   async function openAccount() {
     const C = window.Cloud; acct.hidden = false;
     if (!C.user) return loginForm(false);
-    const [ps, me, access] = await Promise.all([C.profiles(), C.me(), C.access?.() || "approved"]);
+    const [ps, me, access, waiting] = await Promise.all([C.profiles(), C.me(), C.access?.() || "approved", C.pendingAccess?.() || []]);
     acct.innerHTML = `<div class="card glass add-card"><h2>${esc(me?.display_name || C.user.email)}</h2><p class="muted">${esc(C.user.email)}</p>
       <div class="kinds">${[["books", "📚 Books"], ["games", "🎲 Board games"], ["videogames", "🎮 Video games"]].map(([k, l]) => `<button data-kind="${k}" class="${K.id === k ? "on" : ""}">${l}</button>`).join("")}</div>
+      ${waiting.length ? `<h4>Waiting for your approval</h4><ul class="ab-res reqs">${waiting.map((w) => `<li data-t="${esc(w.token)}"><span><b>${esc(w.name)}</b><small>${esc(w.email)} · ${new Date(w.requested).toLocaleDateString()}</small></span><button class="rq-yes" title="Full access, including picks from Claude">Approve</button><button class="rq-no">Deny</button></li>`).join("")}</ul>` : ""}
       <h4>Libraries</h4><ul class="ab-res libs">${ps.map((p) => `<li data-lib="${esc(p.slug)}" class="${p.slug === ctx.slug ? "on" : ""}"><span><b>${esc(p.display_name)}'s ${K.lib}</b><small>${p.id === me?.id ? "yours" : p.is_public ? "public" : "private"}</small></span></li>`).join("") || `<li class="muted">No libraries yet: run supabase/schema.sql and add profiles</li>`}</ul>
       ${me && access === "approved" ? `<button class="ed-del req">Update my picks now</button>` : ""}
-      ${me && access === "pending" ? `<p class="ed-note acc">⏳ Waiting for Baron to approve full access (picks from Claude). You can build your libraries meanwhile. <button class="ed-del acc-req">Remind Baron</button></p>` : ""}
+      ${me && access === "pending" ? `<p class="ed-note acc">⏳ Waiting for Baron to approve full access (picks from Claude). You can build your libraries meanwhile.</p>` : ""}
       ${me && access === "none" ? `<button class="ed-del acc-req">✦ Ask Baron for full access (picks from Claude)</button>` : ""}
       ${me ? `<button class="ed-del vis">${me.is_public ? "Make my map private" : "Make my map public"}</button>` : ""}
       <button class="ed-del out">Sign out</button><button class="ab-close" aria-label="Close">✕</button></div>`;
@@ -434,8 +436,15 @@
     acct.querySelector(".out").onclick = async () => { await C.signOut(); go(null); };
     const vis = acct.querySelector(".vis");
     if (vis) vis.onclick = async () => { try { await C.setPublic(!me.is_public); toast(me.is_public ? "Your map is now private" : "Your map is now public"); acct.hidden = true; } catch (x) { toast("Couldn't change: " + x.message); } };
+    acct.querySelector(".reqs")?.addEventListener("click", async (e) => {
+      const yes = e.target.closest(".rq-yes"), no = e.target.closest(".rq-no"), li = e.target.closest("[data-t]"); if (!li || (!yes && !no)) return;
+      li.querySelectorAll("button").forEach((x) => (x.disabled = true));
+      try { const d = await C.decideAccess(li.dataset.t, !!yes); li.querySelector("small").textContent = d === "approved" ? "✓ Approved: full access" : "Denied: keeps a library, no picks"; li.querySelectorAll("button").forEach((x) => x.remove());
+        if (!acct.querySelector(".reqs button")) document.querySelector("#b-acct")?.classList.remove("has-req"); }
+      catch (x) { toast("Couldn't save: " + x.message); li.querySelectorAll("button").forEach((x) => (x.disabled = false)); }
+    });
     const ar = acct.querySelector(".acc-req");
-    if (ar) ar.onclick = async () => { ar.disabled = true; try { const r = await C.requestAccess(); ar.textContent = r === "approved" ? "You're approved: reopen this menu" : "Sent: Baron gets an email"; } catch (x) { ar.textContent = "Couldn't ask: " + x.message; } };
+    if (ar) ar.onclick = async () => { ar.disabled = true; try { const r = await C.requestAccess(); ar.textContent = r === "approved" ? "You're approved: reopen this menu" : "Sent: Baron will see your request"; } catch (x) { ar.textContent = "Couldn't ask: " + x.message; } };
     const rq = acct.querySelector(".req");
     if (rq) rq.onclick = async () => { try { await C.requestRefresh(); rq.textContent = "Requested: Claude picks it up on the next run"; } catch (x) { rq.textContent = /duplicate|unique|409/i.test(x.message) ? "Already requested" : /row-level|policy|403/i.test(x.message) ? "Picks from Claude are invite-only for now: ask Baron" : "Couldn't request: " + x.message; } rq.disabled = true; };
   }

@@ -108,3 +108,15 @@ revoke execute on function public.access_request_info(uuid) from public;
 revoke execute on function public.decide_access(uuid, boolean) from public;
 grant execute on function public.access_request_info(uuid) to anon, authenticated;
 grant execute on function public.decide_access(uuid, boolean) to anon, authenticated;
+
+-- No email service? Baron approves inside the app: his account menu lists waiting requests.
+create or replace function public.pending_access() returns json
+language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from public.profiles where id = auth.uid() and slug = 'baron') then return '[]'::json; end if;
+  return coalesce((select json_agg(json_build_object('token', a.token, 'name', coalesce(p.display_name, u.email), 'email', u.email, 'requested', a.requested_at) order by a.requested_at)
+    from public.access_requests a join auth.users u on u.id = a.user_id left join public.profiles p on p.id = a.user_id
+    where a.decided_at is null), '[]'::json);
+end $$;
+revoke execute on function public.pending_access() from public, anon;
+grant execute on function public.pending_access() to authenticated;

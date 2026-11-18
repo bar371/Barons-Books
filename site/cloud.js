@@ -112,6 +112,8 @@
       const [a, r] = await Promise.all([rest(`/approved_users?user_id=eq.${session.user.id}&select=user_id`).catch(() => []), rest(`/access_requests?user_id=eq.${session.user.id}&select=decision`).catch(() => [])]);
       return a?.length ? "approved" : r?.[0]?.decision === "denied" ? "denied" : r?.length ? "pending" : "none";
     },
+    async pendingAccess() { return session ? (await rest("/rpc/pending_access", { method: "POST", body: "{}" }).catch(() => [])) || [] : []; }, // Baron only
+    async decideAccess(t, approve) { return rest("/rpc/decide_access", { method: "POST", body: JSON.stringify({ t, approve }) }); },
     async requestAccess() { if (!session) throw new Error("Not signed in"); return rest("/rpc/request_access", { method: "POST", body: "{}" }); },
     async requestRefresh(note) {
       if (!session) throw new Error("Not signed in");
