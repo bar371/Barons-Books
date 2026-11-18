@@ -120,3 +120,31 @@ begin
 end $$;
 revoke execute on function public.pending_access() from public, anon;
 grant execute on function public.pending_access() to authenticated;
+
+-- Pre-approved people: Baron names them ahead of time; signing up with that email approves them at once
+-- (no request, no waiting). Add someone with:  insert into public.preapproved_emails (email) values ('name@example.com');
+create table if not exists public.preapproved_emails (
+  email    text primary key check (email = lower(email)),
+  added_at timestamptz not null default now()
+);
+alter table public.preapproved_emails enable row level security; -- no client policies: only SQL / the trigger read it
+
+create or replace function public.on_user_confirmed() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.email_confirmed_at is not null and (tg_op = 'INSERT' or old.email_confirmed_at is null)
+     and not exists (select 1 from public.approved_users where user_id = new.id) then
+    begin
+      if exists (select 1 from public.preapproved_emails where email = lower(new.email)) then
+        insert into public.approved_users (user_id) values (new.id) on conflict do nothing;
+        insert into public.access_requests (user_id, decided_at, decision) values (new.id, now(), 'approved')
+          on conflict (user_id) do update set decided_at = now(), decision = 'approved';
+      else
+        insert into public.access_requests (user_id) values (new.id) on conflict (user_id) do nothing;
+        perform public.email_access_request(new.id);
+      end if;
+    exception when others then raise warning 'access request for % not handled: %', new.id, sqlerrm;
+    end;
+  end if;
+  return new;
+end $$;
