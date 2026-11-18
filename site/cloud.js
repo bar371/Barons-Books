@@ -106,6 +106,13 @@
       await rest(`/profiles?id=eq.${session.user.id}`, { method: "PATCH", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ is_public: v }) });
       profiles = null;
     },
+    // full access (Claude picks) is approved by Baron from an email; "approved" | "pending" | "denied" | "none"
+    async access() {
+      if (!session) return "none";
+      const [a, r] = await Promise.all([rest(`/approved_users?user_id=eq.${session.user.id}&select=user_id`).catch(() => []), rest(`/access_requests?user_id=eq.${session.user.id}&select=decision`).catch(() => [])]);
+      return a?.length ? "approved" : r?.[0]?.decision === "denied" ? "denied" : r?.length ? "pending" : "none";
+    },
+    async requestAccess() { if (!session) throw new Error("Not signed in"); return rest("/rpc/request_access", { method: "POST", body: "{}" }); },
     async requestRefresh(note) {
       if (!session) throw new Error("Not signed in");
       await rest("/refresh_requests", { method: "POST", headers: { Prefer: "return=minimal" }, body: JSON.stringify({ user_id: session.user.id, note: note || null, ...(K.id === "books" ? {} : { kind: K.id }) }) });

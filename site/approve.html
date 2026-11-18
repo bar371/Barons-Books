@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Approve access · Baron's Library</title>
+<link rel="icon" href="icons/books.svg">
+<style>
+  :root { color-scheme: dark; --bg: #070a14; --card: #111a33; --line: #2a3760; --text: #e8ecff; --muted: #8f9bc4; --ok: #2f9e44; --no: #c92a2a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px; background: radial-gradient(circle at 50% 30%, #1a2547, var(--bg) 70%); color: var(--text); font: 16px/1.5 system-ui, sans-serif; }
+  .card { width: 100%; max-width: 420px; background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 28px 24px; text-align: center; }
+  h1 { font-size: 20px; margin: 0 0 6px; } p { margin: 8px 0; } .muted { color: var(--muted); font-size: 14px; }
+  .row { display: flex; gap: 10px; justify-content: center; margin-top: 20px; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 11px 22px; cursor: pointer; color: #fff; }
+  .yes { background: var(--ok); } .no { background: transparent; border: 1px solid var(--line); color: var(--muted); }
+  button:disabled { opacity: .5; cursor: default; } a { color: #74c0fc; }
+</style>
+</head>
+<body>
+<main class="card" id="c"><p class="muted">Loading…</p></main>
+<script>
+(async () => {
+  const URL_ = "https://vimynskvwneemuqplujf.supabase.co", KEY = "sb_publishable_TBQcptpeWuANbjitnKqjRw_kpcI2nln";
+  const c = document.getElementById("c"), t = new URLSearchParams(location.search).get("t");
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (x) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[x]));
+  const rpc = async (fn, args) => {
+    const r = await fetch(`${URL_}/rest/v1/rpc/${fn}`, { method: "POST", headers: { apikey: KEY, "Content-Type": "application/json" }, body: JSON.stringify(args) });
+    const b = await r.json().catch(() => null);
+    if (!r.ok) throw new Error(b?.message || `HTTP ${r.status}`);
+    return b;
+  };
+  const done = (who, d) => (c.innerHTML = `<h1>${d === "approved" ? "✓ Approved" : "Denied"}</h1><p>${esc(who.name)} ${d === "approved" ? "now has full access, including picks from Claude." : "keeps a library but gets no picks from Claude."}</p>`
+    + `<p class="muted">Changed your mind? <a href="#" id="flip">${d === "approved" ? "Deny instead" : "Approve instead"}</a></p>`);
+  try {
+    if (!/^[0-9a-f-]{36}$/i.test(t || "")) throw new Error("This link is incomplete.");
+    const who = await rpc("access_request_info", { t });
+    if (!who) throw new Error("This link is not valid any more.");
+    const ask = () => {
+      c.innerHTML = `<h1>${esc(who.name)} wants access</h1><p class="muted">${esc(who.email)} · signed up ${new Date(who.requested).toLocaleDateString()}</p>`
+        + `<p>Approving gives them full access: their own book, board game and video game libraries, plus picks from Claude (which run on your subscription).</p>`
+        + `<div class="row"><button class="yes">Approve</button><button class="no">Deny</button></div>`;
+      c.querySelectorAll("button").forEach((b) => (b.onclick = () => decide(b.classList.contains("yes"))));
+    };
+    const decide = async (yes) => {
+      c.querySelectorAll("button").forEach((b) => (b.disabled = true));
+      try { done(who, await rpc("decide_access", { t, approve: yes })); c.querySelector("#flip").onclick = (e) => { e.preventDefault(); decide(!yes); }; }
+      catch (x) { c.innerHTML += `<p class="muted">Couldn't save: ${esc(x.message)}</p>`; }
+    };
+    if (who.decision) { done(who, who.decision); c.querySelector("#flip").onclick = (e) => { e.preventDefault(); decide(who.decision !== "approved"); }; }
+    else ask();
+  } catch (x) { c.innerHTML = `<h1>Can't open this request</h1><p class="muted">${esc(x.message)}</p>`; }
+})();
+</script>
+</body>
+</html>
