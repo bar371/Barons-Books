@@ -63,6 +63,30 @@
       pending: "Added by you · Claude adds genres & picks on the next update",
       signupBlurb: "Map your own reading: add books, build genres, and get picks. You'll stay signed in on this device.",
     },
+    // Goodreads: My Books -> Import and export -> Export library. One row per book, shelf in "Exclusive Shelf".
+    importLabel: "Have a Goodreads account? Import your library export (CSV)",
+    importAccept: ".csv,text/csv",
+    importNote: "Your Goodreads shelves and star ratings come across as they are. Claude sorts the books into genres and adds picks on the next update (Account → Update my picks now).",
+    importEmpty: "No books found in that file.",
+    importSummary: (items, updates) => { const c = (s) => items.filter((i) => i.shelf === s).length;
+      return `<p><b>${items.length}</b> books found: ${c("read")} read${c("reading") ? `, ${c("reading")} reading now` : ""}${c("to-read") ? `, ${c("to-read")} to read` : ""}.${updates ? ` ${updates} already on your map get updated, not doubled.` : ""}</p>`; },
+    sameItem: (b, it) => b.id === it.id || (b.goodreadsId && b.goodreadsId === it.goodreadsId) || (String(b.title).toLowerCase().split(" (")[0].trim() === it.title.toLowerCase() && (!b.author || !it.author || b.author === it.author)),
+    async importCSV(text) {
+      const rows = d3.csvParse(text.replace(/^\uFEFF/, ""));
+      if (!rows.columns.includes("Book Id") || !rows.columns.includes("Exclusive Shelf")) throw new Error("That file doesn't look like a Goodreads library export (it needs the Book Id and Exclusive Shelf columns)");
+      const clean = (v) => String(v || "").replace(/^="?|"$/g, "").replace(/"/g, "").trim(); // Goodreads writes ISBNs as ="978..."
+      const int = (v) => { const x = parseInt(v, 10); return x > 0 ? x : null; };
+      const SHELF = { read: "read", "currently-reading": "reading", "to-read": "to-read" };
+      return rows.filter((r) => r["Book Id"] && r.Title && SHELF[r["Exclusive Shelf"]]).map((r) => {
+        const m = r.Title.match(/^(.*?)\s*\(([^()]*?),?\s*#(\d+(?:\.\d+)?)\)\s*$/), isbn = clean(r.ISBN13) || clean(r.ISBN), shelf = SHELF[r["Exclusive Shelf"]];
+        const stars = Math.round(parseFloat(r["My Rating"]) || 0);
+        return { id: String(r["Book Id"]), goodreadsId: String(r["Book Id"]), title: (m ? m[1] : r.Title).trim(), author: (r.Author || "").trim() || "Unknown",
+          series: m ? m[2].trim() : null, seriesNo: m ? parseFloat(m[3]) : null, pages: int(r["Number of Pages"]), year: int(r["Original Publication Year"]) || int(r["Year Published"]),
+          isbn13: isbn.length === 13 ? isbn : null, rating: shelf === "read" && stars ? stars : null, shelf,
+          dateRead: shelf === "read" && r["Date Read"] ? r["Date Read"].replace(/\//g, "-") : null, note: (r["My Review"] || "").replace(/<[^>]+>/g, " ").trim().slice(0, 300) || null,
+          cover: isbn ? `https://covers.openlibrary.org/b/isbn/${isbn}-L.jpg?default=false` : null };
+      });
+    },
     // Open Library search for the add dialog, normalised to { key, title, small, creator, thumb, big, make() }
     async find(s, signal) {
       const r = await fetch(`https://openlibrary.org/search.json?q=${encodeURIComponent(s)}&fields=key,title,author_name,first_publish_year,cover_i,isbn,number_of_pages_median&limit=8`, { signal });
@@ -490,6 +514,7 @@
     set('link[rel="icon"]', `icons/${K.id}.svg`); set('link[rel="apple-touch-icon"]', `icons/${K.id}-180.png`); set('link[rel="manifest"]', `${K.id}.webmanifest`);
   }
   for (const [sel, prop, v] of K.dom || []) { const el = document.querySelector(sel); if (el) el[prop] === undefined ? el.setAttribute(prop, v) : (el[prop] = v); }
+  if (K.id !== "books") document.querySelector(".help-gr")?.remove(); // the Goodreads how-to is for book libraries
   if (K.dom) { const q = document.querySelector("#t-queue"), t = q?.parentElement?.lastChild; if (t?.nodeType === 3) t.nodeValue = K.queueToggle || "Wishlist"; }
   document.documentElement.dataset.kind = K.id; // lets style.css theme each kind
   if (K.fontHref) document.head.append(Object.assign(document.createElement("link"), { rel: "stylesheet", href: K.fontHref })); // the look's display font

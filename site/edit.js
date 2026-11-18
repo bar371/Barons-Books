@@ -18,7 +18,7 @@
   let pk = null; // Claude's picks for this library: { newGenres, books: {id: {genres, blurb, fit}}, recs }
   if (new URLSearchParams(location.search).has("edit")) ls.set(EDIT, "1");
   const canEdit = () => ctx.isMine || (!ctx.ok && ls.get(EDIT) != null); // offline fallback: ?edit keeps local editing
-  let editing = false;
+  let editing = false, approved = false; // approved: Baron has granted full access (imports, picks from Claude)
   const Store = {
     async save(o) {
       if (ctx.isMine) {
@@ -37,9 +37,10 @@
   async function loadData() {
     // books start from data.json (Baron's Goodreads build); other kinds start from their empty category set
     const get = K.base ? () => K.base() : () => fetch("data.json", { cache: "no-cache" }).then((r) => r.json());
-    if (!window.Cloud) return get();
+    if (!window.Cloud) { approved = true; return get(); }
     const [c, base] = await Promise.all([window.Cloud.resolve().catch(() => ctx), get()]);
     ctx = c;
+    approved = ctx.isMine ? (await window.Cloud.access?.().catch(() => "none")) === "approved" || ctx.slug === "baron" : !ctx.ok; // offline (?edit) keeps everything local
     let d = base;
     if (!K.base && ctx.slug !== "baron") d = await fetch(`libraries/${ctx.slug}.json`, { cache: "no-cache" }).then((r) => (r.ok ? r.json() : emptyBase(base))).catch(() => emptyBase(base));
     if (ctx.profile) {
@@ -258,6 +259,8 @@
   let timer = 0, results = [], picks = [], ctl = null;
   const isPicked = (b) => picks.some((p) => p.key === b.key);
   function openAdd(prefill) {
+    const imp = modal.querySelector(".ab-import");
+    if (imp) { imp.querySelector("label").hidden = !approved; imp.querySelector(".ab-wait")?.remove(); if (!approved) imp.insertAdjacentHTML("beforeend", `<small class="ab-wait muted">📥 Importing a whole ${K.id === "books" ? "Goodreads library" : "collection file"} opens once Baron approves your account.</small>`); }
     modal.hidden = false; abform.hidden = true; abres.innerHTML = ""; picks = []; renderBasket(); abq.value = typeof prefill === "string" ? prefill : "";
     setTimeout(() => abq.focus(), 30); if (abq.value) search();
   }
@@ -337,28 +340,35 @@
   modal.querySelector(".ab-import input")?.addEventListener("change", async (e) => {
     const f = e.target.files[0]; e.target.value = ""; if (!f) return;
     abres.innerHTML = ""; basket.hidden = true; abform.hidden = false; abform.innerHTML = `<p class="muted">Reading ${esc(f.name)}…</p>`;
+    if (!approved) { abform.innerHTML = `<p class="err">Importing opens once Baron approves your account.</p>`; return; }
     try { imported = await K.importCSV(await f.text()); }
     catch (x) { abform.innerHTML = `<p class="err">${esc(x.message)}</p>`; return; }
-    const have = (it) => ov.books.find((b) => sameItem(b, it));
+    const base = pristine ? [...pristine.books, ...(pristine.queue || [])] : [];
+    const have = (it) => ov.books.find((b) => sameItem(b, it)) || base.find((b) => sameItem(b, it));
     const owned = imported.filter((i) => i.shelf === "read"), wish = imported.filter((i) => i.shelf !== "read"), exps = imported.filter((i) => i.expansion), upd = imported.filter(have);
     abform.innerHTML = imported.length ? `${K.importSummary ? K.importSummary(imported, upd.length) : `<p><b>${imported.length}</b> games found: ${owned.filter((i) => i.owned !== false).length} owned${owned.some((i) => i.owned === false) ? `, ${owned.filter((i) => i.owned === false).length} played but not owned` : ""}${exps.length ? ` (${exps.length} of them expansions)` : ""}, ${wish.length} on the wishlist.${upd.length ? ` ${upd.length} already on your map get updated, not doubled.` : ""}</p>`}
       <div class="ab-many">${imported.slice(0, 60).map((p) => `<div title="${esc(p.title)}">${p.cover ? `<img src="${esc(p.cover)}" alt="">` : `<span class="ph"></span>`}<small>${esc(p.title)}</small></div>`).join("")}</div>
       <p class="ed-note">${K.importNote || "Ratings convert from BGG's 10 points to 5 stars. Claude adds categories, missing designers and picks on the next update."}</p>
-      <button class="ab-save ab-import-go">Import ${imported.length} games</button>` : `<p class="muted">${K.importEmpty || "No owned, played or wishlisted games in that file."}</p>`;
+      <button class="ab-save ab-import-go">Import ${imported.length} ${K.items}</button>` : `<p class="muted">${K.importEmpty || "No owned, played or wishlisted games in that file."}</p>`;
   });
   abform.addEventListener("click", (e) => {
     if (!e.target.closest(".ab-import-go")) return;
     const now = new Date().toISOString();
     for (const { soft, ...it } of imported) { // soft: the file didn't say which shelf, so a game already on the map keeps its own
+      const bx = !ov.books.some((b) => sameItem(b, it)) && pristine && [...pristine.books, ...(pristine.queue || [])].find((b) => sameItem(b, it));
+      if (bx) { // already in the built-in library: only a changed rating carries over
+        if (it.rating && it.rating !== bx.rating && bx.shelf === "read" && it.shelf === "read") { ov.ratings = ov.ratings || {}; ov.ratings[bx.id] = it.rating; }
+        continue;
+      }
       const ex = ov.books.find((b) => sameItem(b, it));
       if (ex) { // update what BGG knows better (shelf, your rating, plays, note); fill the rest only where empty
         Object.assign(ex, { shelf: soft ? ex.shelf : it.shelf, bggId: it.bggId, plays: it.plays, note: it.note ?? ex.note }); if (it.owned === false) ex.owned = false; else delete ex.owned;
         if (it.rating) { ex.rating = it.rating; if (ov.ratings) delete ov.ratings[ex.id]; }
-        for (const k of ["author", "year", "players", "playtime", "weight", "series", "cover", "expansion", "platforms", "seriesNo", "wikidata", "hours", "steamId"]) if ((ex[k] == null || ex[k] === "") && it[k] != null) ex[k] = it[k];
+        for (const k of ["author", "year", "players", "playtime", "weight", "series", "cover", "expansion", "platforms", "seriesNo", "wikidata", "hours", "steamId", "pages", "isbn13", "goodreadsId", "dateRead"]) if ((ex[k] == null || ex[k] === "") && it[k] != null) ex[k] = it[k];
         if (it.genres?.length && !ex.genres?.length) { ex.genres = it.genres; delete ex.pending; }
       } else ov.books.push({ ...it, genres: it.genres || [], added: now, ...(it.genres?.length ? {} : { pending: true }) }); // a list that already carries categories shows up sorted at once
     }
-    const n = imported.length; imported = []; closeAdd(); commit(null); setTimeout(() => toast(`Imported ${n} games`), 300);
+    const n = imported.length; imported = []; closeAdd(); commit(null); setTimeout(() => toast(`Imported ${n} ${K.items}`), 300);
   });
   abform.addEventListener("change", (e) => { if (e.target.classList.contains("ab-genre") && e.target.value === "__new") { abform.querySelector(".ed-new").hidden = false; abform.querySelector(".ed-gname").focus(); } });
 

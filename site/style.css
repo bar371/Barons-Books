@@ -278,3 +278,6 @@ kbd{font:500 11px var(--ui);padding:1px 6px;border:1px solid var(--line);border-
 .mv-box .ed-note{margin:6px 0 0}
 #b-acct.has-req{position:relative} #b-acct.has-req::after{content:"";position:absolute;top:4px;right:4px;width:9px;height:9px;border-radius:50%;background:#ff6b6b;box-shadow:0 0 0 2px var(--bg,#070a14)}
 .reqs li{gap:8px} .reqs li span{flex:1} .reqs button{font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:transparent;color:inherit;cursor:pointer} .reqs .rq-yes{background:#2f9e44;border-color:#2f9e44;color:#fff}
+.help-gr{margin:12px 0 4px;border:1px solid var(--line);border-radius:12px;padding:8px 12px;text-align:left} .help-gr summary{cursor:pointer;font-weight:600}
+.help-gr ol{margin:8px 0 4px;padding-left:20px;font-size:14px;line-height:1.5} .help-gr li{margin:3px 0} html[data-kind] .help-gr{display:none}
+.ab-wait{display:block;font-size:12px}
