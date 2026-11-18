@@ -270,3 +270,9 @@ kbd{font:500 11px var(--ui);padding:1px 6px;border:1px solid var(--line);border-
 .layout-menu h4{font:600 11px var(--ui);text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:2px 8px 6px;margin:0}
 .layout-menu button{padding:8px 10px;border-radius:9px;text-align:left;font-weight:500}
 .layout-menu button:hover{background:var(--line)} .layout-menu button.on{background:var(--accent);color:var(--accent-ink)}
+.mv-box{margin:6px 0 12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:rgba(255,212,59,.05)}
+.mv-box>b{font-size:13px} .mv-stars{margin:2px 0 4px} .mv-stars button{background:transparent;font-size:26px;cursor:pointer}
+.mv-stars button.half{background:linear-gradient(90deg,#ffd43b 50%,var(--line) 50%);-webkit-background-clip:text;background-clip:text;color:transparent}
+.mv-stars small{display:block;font-size:11px} .mv-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.mv-shelf{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:transparent;color:inherit;cursor:pointer} .mv-shelf:hover{background:var(--line)}
+.mv-box .ed-note{margin:6px 0 0}

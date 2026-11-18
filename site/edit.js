@@ -172,8 +172,51 @@
       ${n.mine ? `<button class="ed-del">${E.removeOne}</button>` : ""}
       <p class="ed-note">${n.mine && n.pending ? E.pending : "Changes recluster the map straight away"}</p></div>`;
   }
+  // a recommendation or something on your list: "Played it?" + stars moves it onto your shelf (no ✎ mode needed)
+  const DONE = K.id === "books" ? "Read it?" : "Played it?";
+  function starRow(r) {
+    return [1, 2, 3, 4, 5].map((i) => `<button data-mv-star="${i}" class="${i <= r ? "on" : i - 0.5 === r ? "half" : ""}" aria-label="${i} stars">★</button>`).join("");
+  }
+  function moveHTML(n) {
+    if (!canEdit() || (n.kind !== "rec" && n.kind !== "queue")) return "";
+    const [readLabel] = E.shelves.find(([v]) => v === "read").slice(1), other = E.shelves.filter(([v]) => v !== "read" && !(n.kind === "queue" && v === n.shelf));
+    return `<div class="mv-box" data-mv="${esc(n.id)}"><b>${DONE}</b>
+      <div class="ab-stars mv-stars">${starRow(0)}<small>tap the left half of a star for ½</small></div>
+      <div class="mv-row">${other.map(([v, label]) => `<button class="mv-shelf" data-mv-shelf="${v}">${n.kind === "rec" ? "＋ " : "→ "}${esc(label)}</button>`).join("")}</div>
+      <p class="ed-note">Rating it moves it to ${esc(readLabel)} on your map.</p></div>`;
+  }
+  function moveTo(n, shelf, rating) {
+    const today = new Date().toISOString().slice(0, 10), mine = n.mine && ov.books.find((b) => b.id === n.id);
+    if (mine) Object.assign(mine, { shelf, rating: shelf === "read" ? rating : null, dateRead: shelf === "read" ? today : null });
+    else {
+      const keep = ["title", "author", "year", "cover", "series", "seriesNo", "platforms", "players", "playtime", "weight", "bggId", "wikidata", "olKey", "pages", "blurb"];
+      const it = Object.fromEntries(keep.filter((f) => n[f] != null && n[f] !== "").map((f) => [f, n[f]]));
+      const id = n.kind === "queue" ? n.id : n.wikidata ? "wd-" + n.wikidata : "p-" + String(n.title).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      ov.books = ov.books.filter((b) => b.id !== id);
+      ov.books.push({ ...it, id, replaces: n.kind === "queue" ? n.id : undefined, shelf, rating: shelf === "read" ? rating : null, genres: n.genreIds || n.genres || [],
+        ...(K.id === "games" && shelf === "read" && n.kind === "rec" ? { owned: false } : {}), // a board game you played isn't necessarily one you own
+        dateRead: shelf === "read" ? today : null, added: new Date().toISOString(), pending: true });
+      n = { id };
+    }
+    commit(n.id);
+    toast(shelf === "read" ? `${DONE.replace("?", "")} · ${rating}★ saved` : "Moved");
+  }
+  document.addEventListener("pointermove", (e) => { // preview the stars, halves included
+    const b = e.target.closest("[data-mv-star]"); if (!b) return;
+    const r = b.closest(".mv-stars"), v = +b.dataset.mvStar - (e.offsetX < b.offsetWidth / 2 ? 0.5 : 0);
+    r.querySelectorAll("[data-mv-star]").forEach((x) => { const i = +x.dataset.mvStar; x.className = i <= v ? "on" : i - 0.5 === v ? "half" : ""; });
+  });
+  document.addEventListener("pointerout", (e) => { const r = e.target.closest?.(".mv-stars"); if (r && !r.contains(e.relatedTarget)) r.querySelectorAll("[data-mv-star]").forEach((x) => (x.className = "")); });
+  document.addEventListener("click", (e) => {
+    const box = e.target.closest("[data-mv]"); if (!box) return;
+    const n = window.Library.node(box.dataset.mv); if (!n) return;
+    const st = e.target.closest("[data-mv-star]"), sh = e.target.closest("[data-mv-shelf]");
+    if (st) moveTo(n, "read", +st.dataset.mvStar - (e.offsetX < st.offsetWidth / 2 ? 0.5 : 0));
+    else if (sh) moveTo(n, sh.dataset.mvShelf, null);
+  });
   // in ✎ mode the stars under a read book's title become clickable
   function rateHTML(n) {
+    if (n.kind === "rec" || n.kind === "queue") return moveHTML(n);
     if (!editing || n.kind !== "book") return "";
     return `<div class="ab-stars ed-stars" data-ed-rated="${esc(n.id)}" title="Click to change your rating">${[1, 2, 3, 4, 5].map((r) => `<button data-ed-rate="${r}" class="${r <= (n.rating || 0) ? "on" : ""}" aria-label="${r} stars">★</button>`).join("")}${n.rating ? `<button class="ed-unrate" data-ed-rate="0">clear</button>` : `<small>rate it</small>`}</div>`;
   }
