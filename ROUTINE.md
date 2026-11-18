@@ -137,6 +137,21 @@ For each id in `needDetails`, fill in what you know reliably and leave out what 
 (developer), `year`, `genres`, `because` (ids from `read`), `reason` and `fit`, plus `series` and `platforms`.
 When a name is shared by a remake or reboot, the `year` says which one you mean.
 
+**`holdsUp` (required on every rec): how well the game holds up for someone starting it today, 0 to 100.**
+Older games are hard to go back to: graphics, controls, camera, UI, saves and conveniences age, and the person's high
+ratings of old games include nostalgia from playing them when they were new. Judge the version you recommend:
+
+- 90 to 100: recent, or a game that still looks and plays like a modern one.
+- 70 to 89: dated in places but easy to enjoy today (strong art style, clean 2D or pixel art, a good remaster).
+- 40 to 69: noticeably old: clunky controls or camera, early 3D, small screens, hard to read UI. Only for the person who loves that genre.
+- under 40: mostly of historical interest today. Don't recommend these.
+
+**Prefer the version that plays best today.** When a game has a remake or remaster, recommend that one by its own title
+and year (e.g. "Resident Evil 4" 2023 rather than 2005, "Baldur's Gate II: Enhanced Edition" 2013) and say so in
+`reason`. Most picks should be from the last 10 to 12 years: at most about a quarter can be older, each with
+`holdsUp` 70 or more and a reason why it still works today. The site ranks picks by taste, ratings, connections and
+`holdsUp` together, and shows each part.
+
 **Size and focus.** Aim for about 1 pick per 2 games in `read`, between 15 and 40 in all.
 
 - Go by what they rate highly and what their notes praise: story, combat, exploration, difficulty, art, length.

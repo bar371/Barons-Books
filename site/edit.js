@@ -112,8 +112,9 @@
       const taste = r.fit ?? r.parts?.taste ?? 70, bc = new Set(r.because || []);
       const stars = books.filter((b) => bc.has(b.id) && b.rating).map((b) => b.rating);
       const ratings = stars.length ? pr(avg(stars) / 5 * 100) : 70, links = pr(Math.min(bc.size, 3) / 3 * 100);
-      r.score = pr(0.6 * taste + 0.3 * ratings + 0.1 * links);
-      r.parts = { taste, ratings, links, avgStars: stars.length ? pr(avg(stars) * 10) / 10 : null };
+      const age = K.holdsUp ? K.holdsUp(r) : null; // video games: does it still look and play well today?
+      r.score = age ? pr(0.45 * taste + 0.25 * ratings + 0.1 * links + 0.2 * age.v) : pr(0.6 * taste + 0.3 * ratings + 0.1 * links);
+      r.parts = { taste, ratings, links, avgStars: stars.length ? pr(avg(stars) * 10) / 10 : null, ...(age ? { age: age.v, ageNote: age.note } : {}) };
     }
     d.recs.sort(order).forEach((r, i) => (r.rank = i + 1));
     const series = new Set(books.map((b) => b.series).filter(Boolean)), q = d.queue || [];

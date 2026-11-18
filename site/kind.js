@@ -330,6 +330,15 @@
     items: "games",
     count: (n) => many(n, "game", "games"),
     Genres: "Genres",
+    // Old games are hard to go back to: graphics, controls and conveniences age. A pick's score includes how well it
+    // holds up for someone playing it today (0-100): Claude's judgement when given (it knows pixel art ages better than
+    // early 3D, and when a remake exists), otherwise an estimate from the release year. Your own games aren't affected.
+    holdsUp: (r) => {
+      const now = new Date().getFullYear(), age = r.year ? Math.max(0, now - r.year) : null;
+      if (typeof r.holdsUp === "number") return { v: Math.max(0, Math.min(100, Math.round(r.holdsUp))), note: "my call" + (age != null ? ` · ${r.year}` : "") };
+      if (age == null) return { v: 70, note: "year unknown" };
+      return { v: age <= 5 ? 100 : Math.max(30, Math.round(100 - (age - 5) * 3.2)), note: age <= 1 ? "brand new" : `${age} years old` };
+    },
     tipReading: "▶ Playing right now",
     tipQueue: (rank, N, score) => rank ? `🕹 Backlog #${rank} of ${N} · ${score}%` : "🕹 In my backlog",
     kindLabel: { rec: "✦ Recommended", reading: "▶ Playing now", queue: "🕹 Backlog", read: "Played" },

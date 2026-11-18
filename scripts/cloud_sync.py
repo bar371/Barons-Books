@@ -387,6 +387,8 @@ def push(slug, kind="books"):
                "reason": r.get("reason"), "fit": max(0, min(100, int(r.get("fit", 70))))}
         if kind in GAMES:
             rec.update(game_details(r, kind))
+        if kind == "videogames" and isinstance(r.get("holdsUp"), (int, float)):  # how well it holds up today (see ROUTINE.md 2c)
+            rec["holdsUp"] = max(0, min(100, int(r["holdsUp"])))
             # picture lookups are best effort (the site also finds box covers itself): stop after ~2 minutes so the save always happens
             late = time.monotonic() - t0 > 120
             look = {} if late or (prev.get("cover") and (prev.get("bggId") or kind != "games")) else wd_game(r["title"], kind, r.get("year"))

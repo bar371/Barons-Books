@@ -847,7 +847,7 @@ function matchHTML(n) {
   const bar = (label, v, note) => `<div class="part"><span>${label}</span><i style="--w:${v}%"></i><b>${note}</b></div>`;
   return `<div class="match" style="--c:${n.color}"><div class="mring" style="--p:${n.score}"><b>${n.score}<small>%</small></b></div>
     <div><strong>#${n.rank} <em>of ${N} picks</em></strong><span>${tier}</span></div></div>
-    <div class="parts">${bar("Taste fit", p.taste, "my call")}${bar("Your ratings", p.ratings, p.avgStars ? p.avgStars + K.linkedAvg : "no ratings yet")}${bar("Connections", p.links, K.linksNote((n.because || []).length))}</div>`;
+    <div class="parts">${bar("Taste fit", p.taste, "my call")}${bar("Your ratings", p.ratings, p.avgStars ? p.avgStars + K.linkedAvg : "no ratings yet")}${bar("Connections", p.links, K.linksNote((n.because || []).length))}${p.age != null ? bar("Holds up today", p.age, esc(p.ageNote)) : ""}</div>`;
 }
 function topPicksHTML() {
   const top = data.recs.slice().sort((a, b) => a.rank - b.rank).slice(0, 8);
